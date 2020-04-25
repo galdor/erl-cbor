@@ -53,6 +53,10 @@ encode_test() ->
   ?assertEqual("fb3f10000000000000", Encode(0.00006103515625)), % canonical: f90400
   ?assertEqual("fbc010000000000000", Encode(-4.0)), % canonical: f9c400
   ?assertEqual("fbc010666666666666", Encode(-4.1)),
+  ?assertEqual("f97c00", Encode(infinity)),
+  ?assertEqual("f97c00", Encode(positive_infinity)),
+  ?assertEqual("f9fc00", Encode(negative_infinity)),
+  ?assertEqual("f97e00", Encode(nan)),
   %% Booleans
   ?assertEqual("f4", Encode(false)),
   ?assertEqual("f5", Encode(true)),
@@ -84,6 +88,9 @@ encode_test() ->
                Encode(#{<<"a">> => 1, <<"b">> => [2, 3]})),
   ?assertEqual("824161a141624163",
                Encode([<<"a"/utf8>>, #{<<"b">> => <<"c">>}])),
+  %% Simple values
+  ?assertEqual("f6", Encode(null)),
+  ?assertEqual("f7", Encode(undefined)),
   %% Tagged values
   ?assertEqual("c074323031332d30332d32315432303a30343a30305a",
                Encode({0, {string, <<"2013-03-21T20:04:00Z">>}})),

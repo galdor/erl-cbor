@@ -26,6 +26,25 @@
 %% Integers, floats, boolean, binaries, lists and maps are encoded to the
 %% associated CBOR type.
 %%
+%% Atoms are used for specific constants:
+%% <dl>
+%%   <dt>infinity</dt>
+%%   <dt>positive_infinity</dt>
+%%   <dd>IEEE.754 positive infinity.</dd>
+%%
+%%   <dt>negative_infinity</dt>
+%%   <dd>IEEE.754 negative infinity.</dd>
+%%
+%%   <dt>nan</dt>
+%%   <dd>IEEE.754 NaN.</dd>
+%%
+%%   <dt>null</dt>
+%%   <dd>CBOR null value.</dd>
+%%
+%%   <dt>undefined</dt>
+%%   <dd>CBOR undefined value.</dd>
+%% </dl>
+%%
 %% Tuples of the form `{Type, Value}' are used for more complex CBOR
 %% values. If `Type' is a positive integer, `Value' is encoded to a tagged
 %% CBOR value. If `Type' is an atom, the behaviour depends on its value:
@@ -41,6 +60,14 @@ encode(Value) when is_integer(Value) ->
   encode_integer(Value);
 encode(Value) when is_float(Value) ->
   encode_float(Value);
+encode(infinity) ->
+  <<16#f9, 16#7c, 16#00>>;
+encode(positive_infinity) ->
+  <<16#f9, 16#7c, 16#00>>;
+encode(negative_infinity) ->
+  <<16#f9, 16#fc, 16#00>>;
+encode(nan) ->
+  <<16#f9, 16#7e, 16#00>>;
 encode(Value) when is_boolean(Value) ->
   encode_boolean(Value);
 encode(Value) when is_binary(Value) ->
@@ -49,6 +76,10 @@ encode(Value) when is_list(Value) ->
   encode_list(Value);
 encode(Value) when is_map(Value) ->
   encode_map(Value);
+encode(null) ->
+  <<16#f6>>;
+encode(undefined) ->
+  <<16#f7>>;
 encode({string, Value}) ->
   encode_string(Value);
 encode({Tag, Value}) when is_integer(Tag) ->
