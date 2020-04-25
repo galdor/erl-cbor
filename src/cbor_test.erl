@@ -102,4 +102,15 @@ encode_test() ->
   ?assertEqual("d818456449455446",
                Encode({24, <<16#64, 16#49, 16#45, 16#54, 16#46>>})),
   ?assertEqual("d82076687474703a2f2f7777772e6578616d706c652e636f6d",
-               Encode({32, {string, <<"http://www.example.com">>}})).
+               Encode({32, {string, <<"http://www.example.com">>}})),
+  %% Dates
+  ?assertEqual("c074313937302d30312d30315430303a30303a30305a",
+               Encode({datetime, 0})),
+  ?assertEqual("c074323032302d30342d32355432333a30373a31385a",
+               Encode({datetime, 1587856038})),
+  ?assertEqual("c07819323032302d30342d32365430303a30373a31382b30313a3030",
+               Encode({datetime, 1587856038, 3600})),
+  ?assertEqual("c07819323032302d30342d32365430303a30373a31382b30313a3030",
+               Encode({datetime, 1587856038, {1}})),
+  ?assertEqual("c07819323032302d30342d32355431393a33373a31382d30333a3330",
+               Encode({datetime, 1587856038, {-3, -30}})).

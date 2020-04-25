@@ -46,14 +46,31 @@
 %%   <dd>CBOR undefined value.</dd>
 %% </dl>
 %%
-%% Tuples of the form `{Type, Value}' are used for more complex CBOR
-%% values. If `Type' is a positive integer, `Value' is encoded to a tagged
-%% CBOR value. If `Type' is an atom, the behaviour depends on its value:
+%% Tuples are used for more complex CBOR values:
 %% <dl>
-%%   <dt>string</dt>
+%%   <dt>`{string, Value}'</dt>
 %%   <dd>
 %%     `Value' is encoded to a CBOR string; `Value' must be of type
 %%     `unicode:chardata/0'.
+%%   </dd>
+%%   <dt>`{datetime, Value}'</dt>
+%%   <dd>
+%%     `Value' is encoded to a CBOR text string tagged as a date-time string.
+%%     `Value' must be of either of type `calendar:datetime/0' or of type
+%%     `integer/0' and is assumed to represent a UTC datetime.
+%%   </dd>
+%%   <dt>`{datetime, Value, UTCOffset}'</dt>
+%%   <dd>
+%%     `Value' is encoded to a CBOR text string tagged as a date-time string.
+%%     `Value' must be of either of type `calendar:datetime/0' or of type
+%%     `integer/0'. `UTCOffset' indicates the time difference from Coordinated
+%%     Universal Time (UTC) and must be either an integer representing
+%%     seconds, or a tuple of the form `{Hours}' or `{Hours, Minutes}'
+%%   </dd>
+%%   <dt>`{Tag, Value}'</dt>
+%%   <dd>
+%%     `Value' is encoded to a tagged CBOR value. `Tag' must be a positive
+%%     integer.
 %%   </dd>
 %% </dl>
 -spec encode(term()) -> iodata().
@@ -83,6 +100,10 @@ encode(undefined) ->
   <<16#f7>>;
 encode({string, Value}) ->
   encode_string(Value);
+encode({datetime, Value}) ->
+  encode_datetime(Value);
+encode({datetime, Value, Offset}) ->
+  encode_datetime(Value, Offset);
 encode({Tag, Value}) when is_integer(Tag) ->
   encode_tagged_value(Tag, Value);
 encode(Value) ->
@@ -178,6 +199,30 @@ encode_map(Map) ->
                               K1 =< K2
                           end, Data),
   [cbor_util:sequence_header(5, Len), SortedData].
+
+%% @doc Encode a datetime value to a CBOR tagged string.
+-spec encode_datetime(Datetime) -> iodata() when
+    Datetime :: calendar:datetime() | integer().
+encode_datetime(Datetime) ->
+  encode_datetime(Datetime, 0).
+
+%% @doc Encode a datetime value to a CBOR tagged string with a specific
+%% timezone offset.
+-spec encode_datetime(Datetime, cbor_time:utc_offset()) -> iodata() when
+    Datetime :: calendar:datetime() | integer().
+encode_datetime(Datetime, Offset) when is_tuple(Datetime) ->
+  % We have to do the conversion ourselves since `calendar' does not export
+  % `datetime_to_system_time/1'.
+  Seconds = calendar:datetime_to_gregorian_seconds(Datetime) - 62167219200,
+  encode_datetime(Seconds, Offset);
+encode_datetime(Datetime, Offset) ->
+  OffsetSeconds = cbor_time:utc_offset_seconds(Offset),
+  OffsetParam = case OffsetSeconds of
+                  0 -> "Z";
+                  _ -> OffsetSeconds
+                end,
+  String = calendar:system_time_to_rfc3339(Datetime, [{offset, OffsetParam}]),
+  encode_tagged_value(0, {string, String}).
 
 %% @doc Encode a value preceded by a semantic tag.
 -spec encode_tagged_value(non_neg_integer(), term()) -> iodata().
