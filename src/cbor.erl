@@ -54,7 +54,7 @@ encode({string, Value}) ->
 encode({Tag, Value}) when is_integer(Tag) ->
   encode_tagged_value(Tag, Value);
 encode(Value) ->
-  {error, {unencodable_value, Value}}.
+  error({unencodable_value, Value}).
 
 %% @doc Encode an integer to a signed or unsigned CBOR integer.
 -spec encode_integer(integer()) -> iodata().
@@ -151,7 +151,7 @@ encode_tagged_value(Tag, Value) when Tag =< 16#ffffffff ->
 encode_tagged_value(Tag, Value) when Tag =< 16#ffffffffffffffff ->
   [<<6:3, 27:5, Tag:64>>, encode(Value)];
 encode_tagged_value(Tag, _Value) ->
-  {error, {unencodable_tag, Tag}}.
+  error({unencodable_tag, Tag}).
 
 %% @doc Decode a CBOR data item from binary data and return both the Erlang
 %% value it represents and the rest of the binary data which were not decoded.

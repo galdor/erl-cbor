@@ -45,4 +45,4 @@ sequence_header(MajorType, Len) when Len =< 16#ffffffff ->
 sequence_header(MajorType, Len) when Len =< 16#ffffffffffffffff ->
   <<MajorType:3, 27:5, Len: 64>>;
 sequence_header(_MajorType, Len) ->
-  {error, {unencodable_sequence_length, Len}}.
+  error({unencodable_sequence_length, Len}).
