@@ -23,8 +23,19 @@
 %% @doc Encode an Erlang value and return the binary representation of the
 %% resulting CBOR data item.
 %%
-%% Integers, floats, boolean, binaries, lists and maps are converted to the
+%% Integers, floats, boolean, binaries, lists and maps are encoded to the
 %% associated CBOR type.
+%%
+%% Tuples of the form `{Type, Value}' are used for more complex CBOR
+%% values. If `Type' is a positive integer, `Value' is encoded to a tagged
+%% CBOR value. If `Type' is an atom, the behaviour depends on its value:
+%% <dl>
+%%   <dt>string</dt>
+%%   <dd>
+%%     `Value' is encoded to a CBOR string; `Value' must be of type
+%%     `unicode:chardata/0'.
+%%   </dd>
+%% </dl>
 -spec encode(term()) -> iodata().
 encode(Value) when is_integer(Value) ->
   encode_integer(Value);
@@ -38,6 +49,10 @@ encode(Value) when is_list(Value) ->
   encode_list(Value);
 encode(Value) when is_map(Value) ->
   encode_map(Value);
+encode({string, Value}) ->
+  encode_string(Value);
+encode({Tag, Value}) when is_integer(Tag) ->
+  encode_tagged_value(Tag, Value);
 encode(Value) ->
   {error, {unencodable_value, Value}}.
 
@@ -84,10 +99,16 @@ encode_boolean(false) ->
 encode_boolean(true) ->
   <<16#f5>>.
 
-%% @doc Encode a binary to a CBOR byte string.
+%% @doc Encode binary data to a CBOR byte string.
 -spec encode_binary(binary()) -> iodata().
 encode_binary(Bin) ->
   [cbor_util:sequence_header(2, byte_size(Bin)), Bin].
+
+%% @doc Encode a binary string to a CBOR text string.
+-spec encode_string(unicode:chardata()) -> iodata().
+encode_string(CharData) ->
+  Bin = unicode:characters_to_binary(CharData),
+  [cbor_util:sequence_header(3, byte_size(Bin)), Bin].
 
 %% @doc Encode a list to a CBOR array.
 -spec encode_list(list()) -> iodata().
@@ -116,6 +137,21 @@ encode_map(Map) ->
                               K1 =< K2
                           end, Data),
   [cbor_util:sequence_header(5, Len), SortedData].
+
+%% @doc Encode a value preceded by a semantic tag.
+-spec encode_tagged_value(non_neg_integer(), term()) -> iodata().
+encode_tagged_value(Tag, Value) when Tag =< 16#17 ->
+  [<<6:3, Tag:5>>, encode(Value)];
+encode_tagged_value(Tag, Value) when Tag =< 16#ff ->
+  [<<6:3, 24:5, Tag:8>>, encode(Value)];
+encode_tagged_value(Tag, Value) when Tag =< 16#ffff ->
+  [<<6:3, 25:5, Tag:16>>, encode(Value)];
+encode_tagged_value(Tag, Value) when Tag =< 16#ffffffff ->
+  [<<6:3, 26:5, Tag:32>>, encode(Value)];
+encode_tagged_value(Tag, Value) when Tag =< 16#ffffffffffffffff ->
+  [<<6:3, 27:5, Tag:64>>, encode(Value)];
+encode_tagged_value(Tag, _Value) ->
+  {error, {unencodable_tag, Tag}}.
 
 %% @doc Decode a CBOR data item from binary data and return both the Erlang
 %% value it represents and the rest of the binary data which were not decoded.

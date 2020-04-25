@@ -56,13 +56,13 @@ encode_test() ->
   %% Booleans
   ?assertEqual("f4", Encode(false)),
   ?assertEqual("f5", Encode(true)),
-  %% Byte strings
-  ?assertEqual("40", Encode(<<""/utf8>>)),
-  ?assertEqual("4161", Encode(<<"a"/utf8>>)),
-  ?assertEqual("4449455446", Encode(<<"IETF"/utf8>>)),
-  ?assertEqual("42225c", Encode(<<"\"\\"/utf8>>)),
-  ?assertEqual("42c3bc", Encode(<<16#fc/utf8>>)),
-  ?assertEqual("43e6b0b4", Encode(<<16#6c34/utf8>>)),
+  %% Strings
+  ?assertEqual("60", Encode({string, <<"">>})),
+  ?assertEqual("6161", Encode({string, <<"a">>})),
+  ?assertEqual("6449455446", Encode({string, <<"IETF">>})),
+  ?assertEqual("62225c", Encode({string, <<"\"\\">>})),
+  ?assertEqual("62c3bc", Encode({string, <<16#fc/utf8>>})),
+  ?assertEqual("63e6b0b4", Encode({string, <<16#6c34/utf8>>})),
   %% Binary data
   ?assertEqual("40", Encode(<<>>)),
   ?assertEqual("43010203", Encode(<<1, 2, 3>>)),
@@ -81,9 +81,19 @@ encode_test() ->
   ?assertEqual("a201020304", Encode(#{1 => 2, 3 => 4})),
   %% Mixed lists and maps
   ?assertEqual("a24161014162820203",
-               Encode(#{<<"a"/utf8>> => 1, <<"b"/utf8>> => [2, 3]})),
+               Encode(#{<<"a">> => 1, <<"b">> => [2, 3]})),
   ?assertEqual("824161a141624163",
-               Encode([<<"a"/utf8>>, #{<<"b"/utf8>> => <<"c"/utf8>>}])).
+               Encode([<<"a"/utf8>>, #{<<"b">> => <<"c">>}])),
+  %% Tagged values
+  ?assertEqual("c074323031332d30332d32315432303a30343a30305a",
+               Encode({0, {string, <<"2013-03-21T20:04:00Z">>}})),
+  ?assertEqual("c11a514b67b0", Encode({1, 1363896240})),
+  ?assertEqual("c1fb41d452d9ec200000", Encode({1, 1363896240.5})),
+  ?assertEqual("d74401020304", Encode({23, <<1, 2, 3, 4>>})),
+  ?assertEqual("d818456449455446",
+               Encode({24, <<16#64, 16#49, 16#45, 16#54, 16#46>>})),
+  ?assertEqual("d82076687474703a2f2f7777772e6578616d706c652e636f6d",
+               Encode({32, {string, <<"http://www.example.com">>}})).
 
 -spec bin_to_hex(iodata()) -> string().
 bin_to_hex(Data) ->
