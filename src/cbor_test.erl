@@ -18,7 +18,7 @@
 
 encode_test() ->
   Encode = fun (Value) ->
-               bin_to_hex(cbor:encode(Value))
+               cbor:encode_hex(Value)
            end,
   %% Integers
   ?assertEqual("00", Encode(0)),
@@ -103,9 +103,3 @@ encode_test() ->
                Encode({24, <<16#64, 16#49, 16#45, 16#54, 16#46>>})),
   ?assertEqual("d82076687474703a2f2f7777772e6578616d706c652e636f6d",
                Encode({32, {string, <<"http://www.example.com">>}})).
-
--spec bin_to_hex(iodata()) -> string().
-bin_to_hex(Data) ->
-  Data2 = iolist_to_binary(Data),
-  Strings = [io_lib:format("~2.16.0B", [Byte]) || <<Byte:8>> <= Data2],
-  string:to_lower(lists:concat(Strings)).

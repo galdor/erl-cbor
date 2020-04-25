@@ -18,7 +18,8 @@
 %% @reference See <a href="https://tools.ietf.org/html/rfc7049">RFC 7049</a>.
 -module(cbor).
 
--export([encode/1, decode/1]).
+-export([encode/1, encode_hex/1,
+         decode/1]).
 
 %% @doc Encode an Erlang value and return the binary representation of the
 %% resulting CBOR data item.
@@ -86,6 +87,16 @@ encode({Tag, Value}) when is_integer(Tag) ->
   encode_tagged_value(Tag, Value);
 encode(Value) ->
   error({unencodable_value, Value}).
+
+%% @doc Encode an Erlang value and return the representation of the resulting
+%% CBOR data item as an hex-encoded string.
+%%
+%% @see encode/1
+-spec encode_hex(term()) -> unicode:chardata().
+encode_hex(Value) ->
+  Data = iolist_to_binary(encode(Value)),
+  HexData = [io_lib:format("~2.16.0B", [Byte]) || <<Byte:8>> <= Data],
+  string:lowercase(HexData).
 
 %% @doc Encode an integer to a signed or unsigned CBOR integer.
 -spec encode_integer(integer()) -> iodata().
