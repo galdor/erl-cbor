@@ -33,7 +33,7 @@ unsigned_integer_bytes(I, Acc) ->
 %% elements.
 %%
 %% Sequences include arrays, maps, binary data and strings.
--spec sequence_header(MajorType :: 0..7, Len :: non_neg_integer()) -> byte().
+-spec sequence_header(MajorType :: 0..7, Len :: non_neg_integer()) -> binary().
 sequence_header(MajorType, Len) when Len =< 16#17 ->
   <<MajorType:3, Len:5>>;
 sequence_header(MajorType, Len) when Len =< 16#ff ->
