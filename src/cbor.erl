@@ -22,6 +22,9 @@
 
 %% @doc Encode an Erlang value and return the binary representation of the
 %% resulting CBOR data item.
+%%
+%% Integers, floats, boolean, binaries, lists and maps are converted to the
+%% associated CBOR type.
 -spec encode(term()) -> iodata().
 encode(Value) when is_integer(Value) ->
   encode_integer(Value);
@@ -83,37 +86,14 @@ encode_boolean(true) ->
 
 %% @doc Encode a binary to a CBOR byte string.
 -spec encode_binary(binary()) -> iodata().
-encode_binary(Bin) when byte_size(Bin) =< 16#17 ->
-  [<<(16#40 bor byte_size(Bin))>>, Bin];
-encode_binary(Bin) when byte_size(Bin) =< 16#ff ->
-  [<<16#58, (byte_size(Bin)):8>>, Bin];
-encode_binary(Bin) when byte_size(Bin) =< 16#ffff ->
-  [<<16#59, (byte_size(Bin)):16>>, Bin];
-encode_binary(Bin) when byte_size(Bin) =< 16#ffffffff ->
-  [<<16#5a, (byte_size(Bin)):32>>, Bin];
-encode_binary(Bin) when byte_size(Bin) =< 16#ffffffffffffffff ->
-  [<<16#5b, (byte_size(Bin)):64>>, Bin];
 encode_binary(Bin) ->
-  {error, {unencodable_binary, Bin}}.
+  [cbor_util:sequence_header(2, byte_size(Bin)), Bin].
 
 %% @doc Encode a list to a CBOR array.
 -spec encode_list(list()) -> iodata().
 encode_list(List) ->
   {Data, Len} = encode_list_data(List, <<>>, 0),
-  if
-    Len =< 16#17 ->
-      [<<(16#80 bor Len)>>, Data];
-    Len =< 16#ff ->
-      [<<16#98, Len:8>>, Data];
-    Len =< 16#ffff ->
-      [<<16#99, Len:16>>, Data];
-    Len =< 16#ffffffff ->
-      [<<16#9a, Len:32>>, Data];
-    Len =< 16#ffffffffffffffff ->
-      [<<16#9b, Len:64>>, Data];
-    true ->
-      {error, {unencodable_list, List}}
-  end.
+  [cbor_util:sequence_header(4, Len), Data].
 
 -spec encode_list_data(list(), iodata(), Len) -> {iodata(), Len} when
     Len :: non_neg_integer().
@@ -135,20 +115,7 @@ encode_map(Map) ->
   SortedData = lists:sort(fun ([K1, _], [K2, _]) ->
                               K1 =< K2
                           end, Data),
-  if
-    Len =< 16#17 ->
-      [<<(16#a0 bor Len)>>, SortedData];
-    Len =< 16#ff ->
-      [<<16#b8, Len:8>>, SortedData];
-    Len =< 16#ffff ->
-      [<<16#b9, Len:16>>, SortedData];
-    Len =< 16#ffffffff ->
-      [<<16#ba, Len:32>>, SortedData];
-    Len =< 16#ffffffffffffffff ->
-      [<<16#bb, Len:64>>, SortedData];
-    true ->
-      {error, {unencodable_map, Map}}
-  end.
+  [cbor_util:sequence_header(5, Len), SortedData].
 
 %% @doc Decode a CBOR data item from binary data and return both the Erlang
 %% value it represents and the rest of the binary data which were not decoded.
