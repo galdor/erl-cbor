@@ -64,9 +64,11 @@ encode_test() ->
   ?assertEqual("60", Encode({string, <<"">>})),
   ?assertEqual("6161", Encode({string, <<"a">>})),
   ?assertEqual("6449455446", Encode({string, <<"IETF">>})),
+  ?assertEqual("6449455446", Encode({string, "IETF"})),
   ?assertEqual("62225c", Encode({string, <<"\"\\">>})),
   ?assertEqual("62c3bc", Encode({string, <<16#fc/utf8>>})),
   ?assertEqual("63e6b0b4", Encode({string, <<16#6c34/utf8>>})),
+  ?assertEqual("64f0908591", Encode({string, <<16#10151/utf8>>})),
   %% Binary data
   ?assertEqual("40", Encode(<<>>)),
   ?assertEqual("43010203", Encode(<<1, 2, 3>>)),
