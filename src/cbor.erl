@@ -117,8 +117,7 @@ encode_integer(I) ->
 %% @doc Encode a float to a CBOR floating point number.
 %%
 %% We currently do not support encoding to 16 bit or 32 bit CBOR floating
-%% point numbers. Note that BEAM does not support infinity or NaN values so we
-%% do not have to handle them.
+%% point numbers.
 -spec encode_float(float()) -> iodata().
 encode_float(F) ->
   <<16#fb, F:64/float>>.
