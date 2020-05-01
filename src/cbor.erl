@@ -54,18 +54,19 @@
 %%     `unicode:chardata/0'.
 %%   </dd>
 %%   <dt>`{datetime, Value}'</dt>
-%%   <dd>
-%%     `Value' is encoded to a CBOR text string tagged as a date-time string.
-%%     `Value' must be of either of type `calendar:datetime/0' or of type
-%%     `integer/0' and is assumed to represent a UTC datetime.
-%%   </dd>
 %%   <dt>`{datetime, Value, UTCOffset}'</dt>
 %%   <dd>
-%%     `Value' is encoded to a CBOR text string tagged as a date-time string.
-%%     `Value' must be of either of type `calendar:datetime/0' or of type
-%%     `integer/0'. `UTCOffset' indicates the time difference from Coordinated
-%%     Universal Time (UTC) and must be either an integer representing
-%%     seconds, or a tuple of the form `{Hours}' or `{Hours, Minutes}'
+%%     `Value' is encoded to a CBOR text string tagged as a standard datetime
+%%     string. `Value' must be of type `cbor_time:datetime/0'. If present,
+%%     `UTCOffset' is used to transform the universal date represented by
+%%     `Value' into a local date whose timezone is separated from Universal
+%%     Coordinated Time (UTC) by `UTCOffset' seconds.
+%%   </dd>
+%%   <dt>`{timestamp, Value}'</dt>
+%%   <dd>
+%%     `Value' is encoded to a CBOR integer or floating point number tagged as
+%%     an epoch-based datetime. `Value' must be of type
+%%     `cbor_time:datetime/0'.  of type `erlang:timestamp()'.
 %%   </dd>
 %%   <dt>`{Tag, Value}'</dt>
 %%   <dd>
@@ -104,6 +105,8 @@ encode({datetime, Value}) ->
   encode_datetime(Value);
 encode({datetime, Value, Offset}) ->
   encode_datetime(Value, Offset);
+encode({timestamp, Value}) ->
+  encode_timestamp(Value);
 encode({Tag, Value}) when is_integer(Tag) ->
   encode_tagged_value(Tag, Value);
 encode(Value) ->
@@ -208,21 +211,27 @@ encode_datetime(Datetime) ->
 
 %% @doc Encode a datetime value to a CBOR tagged string with a specific
 %% timezone offset.
--spec encode_datetime(Datetime, cbor_time:utc_offset()) -> iodata() when
-    Datetime :: calendar:datetime() | integer().
-encode_datetime(Datetime, Offset) when is_tuple(Datetime) ->
-  % We have to do the conversion ourselves since `calendar' does not export
-  % `datetime_to_system_time/1'.
-  Seconds = calendar:datetime_to_gregorian_seconds(Datetime) - 62167219200,
-  encode_datetime(Seconds, Offset);
+-spec encode_datetime(cbor_time:datetime(), integer()) -> iodata().
 encode_datetime(Datetime, Offset) ->
-  OffsetSeconds = cbor_time:utc_offset_seconds(Offset),
-  OffsetParam = case OffsetSeconds of
+  {Seconds, _Nanoseconds} = cbor_time:datetime_to_seconds(Datetime),
+  OffsetValue = case Offset of
                   0 -> "Z";
-                  _ -> OffsetSeconds
+                  _ -> Offset
                 end,
-  String = calendar:system_time_to_rfc3339(Datetime, [{offset, OffsetParam}]),
+  String = calendar:system_time_to_rfc3339(Seconds, [{offset, OffsetValue}]),
   encode_tagged_value(0, {string, String}).
+
+%% @doc Encode a datetime value to a CBOR integer or floating point number
+%% representing an epoch-based date. An integer is used when the datetime
+%% value does not have fractional seconds.
+-spec encode_timestamp(cbor_time:datetime()) -> iodata().
+encode_timestamp(Datetime) ->
+  case cbor_time:datetime_to_seconds(Datetime) of
+    {Seconds, 0} ->
+      encode_tagged_value(1, Seconds);
+    {Seconds, Nanoseconds} ->
+      encode_tagged_value(1, erlang:float(Seconds) + Nanoseconds * 1.0e-9)
+  end.
 
 %% @doc Encode a value preceded by a semantic tag.
 -spec encode_tagged_value(non_neg_integer(), term()) -> iodata().
