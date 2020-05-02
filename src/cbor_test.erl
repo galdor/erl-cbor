@@ -88,8 +88,7 @@ encode_test() ->
   %% Mixed lists and maps
   ?assertEqual("a24161014162820203",
                Encode(#{<<"a">> => 1, <<"b">> => [2, 3]})),
-  ?assertEqual("824161a141624163",
-               Encode([<<"a"/utf8>>, #{<<"b">> => <<"c">>}])),
+  ?assertEqual("824161a141624163", Encode([<<"a">>, #{<<"b">> => <<"c">>}])),
   %% Simple values
   ?assertEqual("f6", Encode(null)),
   ?assertEqual("f7", Encode(undefined)),
@@ -151,3 +150,61 @@ encode_test() ->
                Encode({timestamp, {{2020, 4, 25}, {23, 07, 18}}})),
   ?assertEqual("c1fb41d7a930a9866738",
                Encode({timestamp, {1587, 856038, 100050}})).
+
+decode_test() ->
+  Decode = fun (String) ->
+               {ok, Value, _Rest} = cbor:decode_hex(String),
+               Value
+           end,
+  %% Integers
+  ?assertEqual(0, Decode("00")),
+  ?assertEqual(1, Decode("01")),
+  ?assertEqual(10, Decode("0a")),
+  ?assertEqual(23, Decode("17")),
+  ?assertEqual(24, Decode("1818")),
+  ?assertEqual(25, Decode("1819")),
+  ?assertEqual(100, Decode("1864")),
+  ?assertEqual(1000, Decode("1903e8")),
+  ?assertEqual(1000000, Decode("1a000f4240")),
+  ?assertEqual(1000000000000, Decode("1b000000e8d4a51000")),
+  ?assertEqual(18446744073709551615, Decode("1bffffffffffffffff")),
+  %% ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
+  ?assertEqual(-18446744073709551616, Decode("3bffffffffffffffff")),
+  %% ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
+  ?assertEqual(-1, Decode("20")),
+  ?assertEqual(-10, Decode("29")),
+  ?assertEqual(-100, Decode("3863")),
+  ?assertEqual(-1000, Decode("3903e7")),
+  %% Binary data
+  ?assertEqual(<<>>, Decode("40")),
+  ?assertEqual(<<1, 2, 3>>, Decode("43010203")),
+  ?assertEqual(<<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                 17, 18, 19, 20, 21, 22, 23, 24>>,
+               Decode("58180102030405060708090a0b0c0d0e0f101112131415161718")),
+  %% Strings
+  ?assertEqual(<<"">>, Decode("60")),
+  ?assertEqual(<<"a">>, Decode("6161")),
+  ?assertEqual(<<"IETF">>, Decode("6449455446")),
+  ?assertEqual(<<"\"\\">>, Decode("62225c")),
+  ?assertEqual(<<16#fc/utf8>>, Decode("62c3bc")),
+  ?assertEqual(<<16#6c34/utf8>>, Decode("63e6b0b4")),
+  ?assertEqual(<<16#10151/utf8>>, Decode("64f0908591")),
+  %% Arrays
+  ?assertEqual([], Decode("80")),
+  ?assertEqual([1, 2, 3], Decode("83010203")),
+  ?assertEqual([1, [2, 3], [4, 5]], Decode("8301820203820405")),
+  ?assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24, 25],
+               Decode("98190102030405060708090a0b0c0d0e0f101112131415161718181819")),
+  %% Maps
+  ?assertEqual(#{}, Decode("a0")),
+  ?assertEqual(#{1 => 2, 3 => 4}, Decode("a201020304")),
+  %% Mixed arrays and maps
+  ?assertEqual(#{<<"a">> => 1, <<"b">> => [2, 3]},
+               Decode("a24161014162820203")),
+  ?assertEqual([<<"a">>, #{<<"b">> => <<"c">>}], Decode("824161a141624163")),
+  % Simple values
+  ?assertEqual(false, Decode("f4")),
+  ?assertEqual(true, Decode("f5")),
+  ?assertEqual(null, Decode("f6")),
+  ?assertEqual(undefined, Decode("f7")).

@@ -15,7 +15,9 @@
 -module(cbor_util).
 
 -export([unsigned_integer_bytes/1,
-         sequence_header/2]).
+         encode_sequence_header/2, decode_sequence_header/2,
+         binary_to_hex_string/1, hex_string_to_binary/1,
+         list_to_map/1]).
 
 %% @doc Return the binary representation of an unsigned integer of
 %% undetermined size.
@@ -33,16 +35,99 @@ unsigned_integer_bytes(I, Acc) ->
 %% elements.
 %%
 %% Sequences include arrays, maps, binary data and strings.
--spec sequence_header(MajorType :: 0..7, Len :: non_neg_integer()) -> binary().
-sequence_header(MajorType, Len) when Len =< 16#17 ->
+-spec encode_sequence_header(MajorType :: 0..7, Len) -> binary() when
+    Len :: non_neg_integer().
+encode_sequence_header(MajorType, Len) when Len =< 16#17 ->
   <<MajorType:3, Len:5>>;
-sequence_header(MajorType, Len) when Len =< 16#ff ->
-  <<MajorType:3, 24:5, Len: 8>>;
-sequence_header(MajorType, Len) when Len =< 16#ffff ->
-  <<MajorType:3, 25:5, Len: 16>>;
-sequence_header(MajorType, Len) when Len =< 16#ffffffff ->
-  <<MajorType:3, 26:5, Len: 32>>;
-sequence_header(MajorType, Len) when Len =< 16#ffffffffffffffff ->
-  <<MajorType:3, 27:5, Len: 64>>;
-sequence_header(_MajorType, Len) ->
+encode_sequence_header(MajorType, Len) when Len =< 16#ff ->
+  <<MajorType:3, 16#18:5, Len: 8>>;
+encode_sequence_header(MajorType, Len) when Len =< 16#ffff ->
+  <<MajorType:3, 16#19:5, Len: 16>>;
+encode_sequence_header(MajorType, Len) when Len =< 16#ffffffff ->
+  <<MajorType:3, 16#1a:5, Len: 32>>;
+encode_sequence_header(MajorType, Len) when Len =< 16#ffffffffffffffff ->
+  <<MajorType:3, 16#1b:5, Len: 64>>;
+encode_sequence_header(_MajorType, Len) ->
   error({unencodable_sequence_length, Len}).
+
+%% @doc Decode the length of a sequence of CBOR elements.
+%%
+%% Sequences include arrays, maps, binary data and strings.
+-spec decode_sequence_header(Tag, iodata()) -> {Len, iodata()} when
+    Tag :: byte(),
+    Len :: non_neg_integer().
+decode_sequence_header(Tag, Data) ->
+  case {Tag band 16#1f, Data} of
+    {Len, Rest} when Len =< 16#17 ->
+      {Len, Rest};
+    {16#18, Data2} ->
+      case Data2 of
+        <<Len:8, Rest/binary>> ->
+          {Len, Rest};
+        _ ->
+          error({truncated_sequence_header, Tag})
+      end;
+    {16#19, Data2} ->
+      case Data2 of
+        <<Len:16, Rest/binary>> ->
+          {Len, Rest};
+        _ ->
+          error({truncated_sequence_header, Tag})
+      end;
+    {16#1a, Data2} ->
+      case Data2 of
+        <<Len:32, Rest/binary>> ->
+          {Len, Rest};
+        _ ->
+          error({truncated_sequence_header, Tag})
+      end;
+    {16#1b, Data2} ->
+      case Data2 of
+        <<Len:64, Rest/binary>> ->
+          {Len, Rest};
+        _ ->
+          error({truncated_sequence_header, Tag})
+      end;
+    {_MinorType, _Rest} ->
+      error({invalid_sequence_header, Tag})
+  end.
+
+%% @doc Convert a binary to an hex-encoded string.
+-spec binary_to_hex_string(binary()) -> string().
+binary_to_hex_string(Bin) ->
+  HexData = [io_lib:format("~2.16.0B", [Byte]) || <<Byte:8>> <= Bin],
+  string:lowercase(HexData).
+
+%% @doc Convert an hex-encoded string to a binary.
+-spec hex_string_to_binary(string()) -> binary().
+hex_string_to_binary(Str) ->
+  hex_string_to_binary(Str, <<>>).
+
+-spec hex_string_to_binary(string(), binary()) -> binary().
+hex_string_to_binary([], Acc) ->
+  Acc;
+hex_string_to_binary([Digit1, Digit2 | Rest], Acc) ->
+  Q1 = hex_digit_to_integer(Digit1),
+  Q2 = hex_digit_to_integer(Digit2),
+  Byte = (Q1 bsl 4) bor Q2,
+  hex_string_to_binary(Rest, <<Acc/binary, Byte>>).
+
+%% @doc Convert an hexadecimal digit character to an integer.
+-spec hex_digit_to_integer(char()) -> 0..15.
+hex_digit_to_integer(C) when C >= $0 andalso C =< $9 ->
+  C - $0;
+hex_digit_to_integer(C) when C >= $a andalso C =< $f ->
+  10 + C - $a;
+hex_digit_to_integer(C) when C >= $F andalso C =< $F ->
+  10 + C - $A.
+
+%% @doc Convert a list of successive keys and values into a map. For example
+%% `list_to_map([a, 1, b, 2])' returns `#{a => 1, b => 2}'.
+-spec list_to_map(list()) -> map().
+list_to_map(Values) ->
+  list_to_map(Values, #{}).
+
+list_to_map([], Acc) ->
+  Acc;
+list_to_map([Key, Value | Rest], Acc) ->
+  list_to_map(Rest, Acc#{Key => Value}).

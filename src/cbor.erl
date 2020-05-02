@@ -19,7 +19,21 @@
 -module(cbor).
 
 -export([encode/1, encode_hex/1,
-         decode/1]).
+         decode/1, decode/2, decode_hex/1, decode_hex/2]).
+
+-export_type([decoding_options/0, decoding_option/0]).
+
+-type decoding_options() :: [decoding_option()].
+%% A set of options affecting CBOR decoding.
+
+% TODO
+-type decoding_option() :: term().
+%% An option affecting CBOR decoding.
+%% <dl>
+%% </dl>
+
+-type decoding_result(ValueType) :: {ok, ValueType, iodata()} | {error, term()}.
+%% The type of values returned by decoding functions.
 
 %% @doc Encode an Erlang value and return the binary representation of the
 %% resulting CBOR data item.
@@ -119,8 +133,7 @@ encode(Value) ->
 -spec encode_hex(term()) -> unicode:chardata().
 encode_hex(Value) ->
   Data = iolist_to_binary(encode(Value)),
-  HexData = [io_lib:format("~2.16.0B", [Byte]) || <<Byte:8>> <= Data],
-  string:lowercase(HexData).
+  cbor_util:binary_to_hex_string(Data).
 
 %% @doc Encode an integer to a signed or unsigned CBOR integer.
 -spec encode_integer(integer()) -> iodata().
@@ -167,19 +180,19 @@ encode_boolean(true) ->
 %% @doc Encode binary data to a CBOR byte string.
 -spec encode_binary(binary()) -> iodata().
 encode_binary(Bin) ->
-  [cbor_util:sequence_header(2, byte_size(Bin)), Bin].
+  [cbor_util:encode_sequence_header(2, byte_size(Bin)), Bin].
 
 %% @doc Encode a binary string to a CBOR text string.
 -spec encode_string(unicode:chardata()) -> iodata().
 encode_string(CharData) ->
   Bin = unicode:characters_to_binary(CharData),
-  [cbor_util:sequence_header(3, byte_size(Bin)), Bin].
+  [cbor_util:encode_sequence_header(3, byte_size(Bin)), Bin].
 
 %% @doc Encode a list to a CBOR array.
 -spec encode_list(list()) -> iodata().
 encode_list(List) ->
   {Data, Len} = encode_list_data(List, <<>>, 0),
-  [cbor_util:sequence_header(4, Len), Data].
+  [cbor_util:encode_sequence_header(4, Len), Data].
 
 -spec encode_list_data(list(), iodata(), Len) -> {iodata(), Len} when
     Len :: non_neg_integer().
@@ -201,7 +214,7 @@ encode_map(Map) ->
   SortedData = lists:sort(fun ([K1, _], [K2, _]) ->
                               K1 =< K2
                           end, Data),
-  [cbor_util:sequence_header(5, Len), SortedData].
+  [cbor_util:encode_sequence_header(5, Len), SortedData].
 
 %% @doc Encode a datetime value to a CBOR tagged string.
 -spec encode_datetime(Datetime) -> iodata() when
@@ -250,11 +263,192 @@ encode_tagged_value(Tag, _Value) ->
 
 %% @doc Decode a CBOR data item from binary data and return both the Erlang
 %% value it represents and the rest of the binary data which were not decoded.
--spec decode(Data) -> {ok, Value, Rest} | {error, Reason} when
-    Data :: iodata(),
-    Value :: term(),
-    Rest :: iodata(),
-    Reason :: term().
-decode(_Data) ->
-  %% TODO
-  error("unimplemented").
+%%
+%% @see decode/2
+-spec decode(iodata()) -> decoding_result(term()).
+decode(Data) ->
+  decode(Data, []).
+
+%% @doc Decode a CBOR data item from binary data and return both the Erlang
+%% value it represents and the rest of the binary data which were not decoded.
+-spec decode(iodata(), decoding_options()) ->
+        {ok, term(), iodata()} | {error, term()}.
+decode(<<Tag:8, Data/binary>>, Opts) ->
+  decode1(Tag, Data, Opts).
+
+-spec decode1(Tag, iodata(), decoding_options()) -> decoding_result(term()) when
+    Tag :: byte().
+decode1(Tag, Data, _Opts) when Tag =< 16#17 ->
+  {ok, Tag, Data};
+decode1(Tag, Data, _Opts) when Tag >= 16#18 andalso Tag =< 16#1b ->
+  decode_unsigned_integer(Tag, Data);
+decode1(Tag, Data, _Opts) when Tag >= 16#20 andalso Tag =< 16#37 ->
+  {ok, -1 - (Tag - 16#20), Data};
+decode1(Tag, Data, _Opts) when Tag >= 16#38 andalso Tag =< 16#3b ->
+  decode_negative_integer(Tag, Data);
+decode1(Tag, Data, _Opts) when Tag >= 16#40 andalso Tag =< 16#5b ->
+  decode_byte_string(Tag, Data);
+decode1(16#5f, _Data, _Opts) ->
+  %% TODO undefinite length byte strings
+  {error, unsupported_undefinite_length_byte_string};
+decode1(Tag, Data, _Opts) when Tag >= 16#60 andalso Tag =< 16#7b ->
+  decode_utf8_string(Tag, Data);
+decode1(16#7f, _Data, _Opts) ->
+  %% TODO undefinite length utf-8 strings
+  {error, unsupported_undefinite_length_utf8_string};
+decode1(Tag, Data, _Opts) when Tag >= 16#80 andalso Tag =< 16#9b ->
+  decode_array(Tag, Data);
+decode1(16#9f, _Data, _Opts) ->
+  %% TODO undefinite length arrays
+  {error, unsupported_undefinite_length_array};
+decode1(Tag, Data, _Opts) when Tag >= 16#a0 andalso Tag =< 16#bb ->
+  %% TODO undefinite length maps
+  decode_map(Tag, Data);
+decode1(16#bf, _Data, _Opts) ->
+  {error, unsupported_undefinite_length_map};
+% TODO c0-d4 tagged items
+% TODO d5-d7 "expected conversion"
+% TODO d8-db extended tagged items
+% TODO e0-f3 simple values
+decode1(16#f4, Data, _Opts) ->
+  {ok, false, Data};
+decode1(16#f5, Data, _Opts) ->
+  {ok, true, Data};
+decode1(16#f6, Data, _Opts) ->
+  {ok, null, Data};
+decode1(16#f7, Data, _Opts) ->
+  {ok, undefined, Data};
+% TODO f8 simple value
+% TODO f9-fb floating point numbers
+decode1(Tag, _Data, _Opts) ->
+  {error, {invalid_tag, Tag}}.
+
+%% @doc Decode a CBOR data item from an hex-encoded string and return both the
+%% Erlang value it represents and the rest of the string which was not
+%% decoded.
+%%
+%% @see decode/1
+-spec decode_hex(string()) -> decoding_result(term()).
+decode_hex(Value) ->
+  decode_hex(Value, []).
+
+%% @doc Decode a CBOR data item from an hex-encoded string and return both the
+%% Erlang value it represents and the rest of the string which was not
+%% decoded.
+%%
+%% @see decode/2
+-spec decode_hex(string(), decoding_options()) -> decoding_result(term()).
+decode_hex(Str, Opts) ->
+  Bin = cbor_util:hex_string_to_binary(Str),
+  case decode(Bin, Opts) of
+    {ok, Value, Rest} ->
+      {ok, Value, cbor_util:binary_to_hex_string(Rest)};
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% @doc Decode a CBOR unsigned integer.
+-spec decode_unsigned_integer(Tag, iodata()) ->
+        decoding_result(non_neg_integer()) when
+    Tag :: 16#18..16#1b.
+decode_unsigned_integer(16#18, <<I:8, Rest/binary>>) ->
+  {ok, I, Rest};
+decode_unsigned_integer(16#19, <<I:16, Rest/binary>>) ->
+  {ok, I, Rest};
+decode_unsigned_integer(16#1a, <<I:32, Rest/binary>>) ->
+  {ok, I, Rest};
+decode_unsigned_integer(16#1b, <<I:64, Rest/binary>>) ->
+  {ok, I, Rest};
+decode_unsigned_integer(_Tag, _Data) ->
+  {error, truncated_unsigned_integer}.
+
+%% @doc Decode a CBOR negative integer.
+-spec decode_negative_integer(Tag, iodata()) ->
+        decoding_result(neg_integer()) when
+    Tag :: 16#38..16#3b.
+decode_negative_integer(16#38, <<I:8, Rest/binary>>) ->
+  {ok, -1 - I, Rest};
+decode_negative_integer(16#39, <<I:16, Rest/binary>>) ->
+  {ok, -1 - I, Rest};
+decode_negative_integer(16#3a, <<I:32, Rest/binary>>) ->
+  {ok, -1 - I, Rest};
+decode_negative_integer(16#3b, <<I:64, Rest/binary>>) ->
+  {ok, -1 - I, Rest};
+decode_negative_integer(_Tag, _Data) ->
+  {error, truncated_negative_integer}.
+
+%% @doc Decode a CBOR binary string to an Erlang binary.
+-spec decode_byte_string(Tag, iodata()) -> decoding_result(binary()) when
+    Tag :: 16#40..16#5b.
+decode_byte_string(Tag, Data) ->
+  {Len, Data2} = cbor_util:decode_sequence_header(Tag, Data),
+  case Data2 of
+    <<Bin:Len/binary, Rest/binary>> ->
+      {ok, iolist_to_binary(Bin), Rest};
+    _ ->
+      {error, truncated_byte_string}
+  end.
+
+%% @doc Decode a CBOR UTF-8 string to an Erlang binary. Invalid or incomplete
+%% UTF-8 sequence cause a decoding error.
+-spec decode_utf8_string(Tag, iodata()) -> decoding_result(binary()) when
+    Tag :: 16#60..16#7b.
+decode_utf8_string(Tag, Data) ->
+  {Len, Data2} = cbor_util:decode_sequence_header(Tag, Data),
+  case Data2 of
+    <<Bin:Len/binary, Rest/binary>> ->
+      Str = case unicode:characters_to_binary(Bin) of
+              Bin2 when is_binary(Bin2) ->
+                Bin2;
+              {error, _, _} ->
+                {error, {invalid_utf8_string, Bin}};
+              {incomplete, _, _} ->
+                {error, {incomplete_utf8_string, Bin}}
+            end,
+      {ok, Str, Rest};
+    _ ->
+      {error, truncated_utf8_string}
+  end.
+
+%% @doc Decode a CBOR array to an Erlang list.
+-spec decode_array(Tag, iodata()) -> decoding_result(list()) when
+    Tag :: 16#80..16#9b.
+decode_array(Tag, Data) ->
+  {Len, Data2} = cbor_util:decode_sequence_header(Tag, Data),
+  case decode_sequence(Data2, Len, []) of
+    {ok, Values, Rest} ->
+      {ok, Values, Rest};
+    {error, truncated_sequence} ->
+      {error, truncated_array};
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% @doc Decode a CBOR map to an Erlang map.
+-spec decode_map(Tag, iodata()) -> decoding_result(map()) when
+    Tag :: 16#a0..16#bb.
+decode_map(Tag, Data) ->
+  {Len, Data2} = cbor_util:decode_sequence_header(Tag, Data),
+  case decode_sequence(Data2, Len*2, []) of
+    {ok, Values, Rest} ->
+      {ok, cbor_util:list_to_map(Values), Rest};
+    {error, truncated_sequence} ->
+      {error, truncated_map};
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% @doc Decode a fixed number of consecutive CBOR data items and return them
+%% as a list.
+-spec decode_sequence(iodata(), non_neg_integer(), list()) -> decoding_result(list()).
+decode_sequence(Data, 0, Acc) ->
+  {ok, lists:reverse(Acc), Data};
+decode_sequence(<<>>, _N, _Acc) ->
+  {error, truncated_sequence};
+decode_sequence(Data, N, Acc) ->
+  case decode(Data) of
+    {ok, Value, Rest} ->
+      decode_sequence(Rest, N-1, [Value | Acc]);
+    {error, Reason} ->
+      {error, Reason}
+  end.
