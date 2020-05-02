@@ -21,7 +21,14 @@
 -export([encode/1, encode_hex/1,
          decode/1, decode/2, decode_hex/1, decode_hex/2]).
 
--export_type([decoding_options/0, decoding_option/0]).
+-export_type([float_value/0, decoding_options/0, decoding_option/0]).
+
+-type float_value() :: float() | positive_infinity | negative_infinity | nan.
+%% A floating point type extending the standard `float/0' type to support
+%% IEEE.754 special values. Note that we do not include a value for negative
+%% zero since Erlang accepts the `-0' syntax but considers it equal to `0`; we
+%% could add a `negative_zero' value, but it would be inconsistent compared to
+%% the handling of positive zero.
 
 -type decoding_options() :: [decoding_option()].
 %% A set of options affecting CBOR decoding.
@@ -43,7 +50,6 @@
 %%
 %% Atoms are used for specific constants:
 %% <dl>
-%%   <dt>infinity</dt>
 %%   <dt>positive_infinity</dt>
 %%   <dd>IEEE.754 positive infinity.</dd>
 %%
@@ -93,8 +99,6 @@ encode(Value) when is_integer(Value) ->
   encode_integer(Value);
 encode(Value) when is_float(Value) ->
   encode_float(Value);
-encode(infinity) ->
-  <<16#f9, 16#7c, 16#00>>;
 encode(positive_infinity) ->
   <<16#f9, 16#7c, 16#00>>;
 encode(negative_infinity) ->
@@ -314,7 +318,8 @@ decode(<<16#f6:8, Data/binary>>, _Opts) ->
 decode(<<16#f7:8, Data/binary>>, _Opts) ->
   {ok, undefined, Data};
 % TODO f8 simple value
-% TODO f9-fb floating point numbers
+decode(<<Tag, Data/binary>>, _Opts) when Tag >= 16#f9 andalso Tag =< 16#fb ->
+  decode_float(Tag, Data);
 decode(<<Tag:8, _Data/binary>>, _Opts) ->
   {error, {invalid_tag, Tag}}.
 
@@ -432,6 +437,52 @@ decode_map(Tag, Data) ->
     {error, Reason} ->
       {error, Reason}
   end.
+
+%% @doc Decode a CBOR floating point number to an Erlang float. We have to
+%% manually decode half-precision floating point numbers because the Erlang
+%% binary syntax does not support them.
+-spec decode_float(Tag, iodata()) -> decoding_result(float_value()) when
+    Tag :: 16#f9..16#fb.
+%% Half-precision
+decode_float(16#f9, <<_S:1, 0:5, 0:10, Rest/binary>>) ->
+  {ok, 0.0, Rest};
+decode_float(16#f9, <<S:1, 0:5, F:10, Rest/binary>>) ->
+  Value = math:pow(-1.0, S) * math:pow(2.0, -14) * (F/1024.0),
+  {ok, Value, Rest};
+decode_float(16#f9, <<0:1, 31:5, 0:10, Rest/binary>>) ->
+  {ok, positive_infinity, Rest};
+decode_float(16#f9, <<1:1, 31:5, 0:10, Rest/binary>>) ->
+  {ok, negative_infinity, Rest};
+decode_float(16#f9, <<_S:1, 31:5, _F:10, Rest/binary>>) ->
+  {ok, nan, Rest};
+decode_float(16#f9, <<S:1, E:5, F:10, Rest/binary>>) ->
+  Value = math:pow(-1.0, S) * math:pow(2.0, E-15) * (1 + F/1024.0),
+  {ok, Value, Rest};
+%% Single precision
+decode_float(16#fa, <<_S:1, 0:8, 0:23, Rest/binary>>) ->
+  {ok, 0.0, Rest};
+decode_float(16#fa, <<0:1, 255:8, 0:23, Rest/binary>>) ->
+  {ok, positive_infinity, Rest};
+decode_float(16#fa, <<1:1, 255:8, 0:23, Rest/binary>>) ->
+  {ok, negative_infinity, Rest};
+decode_float(16#fa, <<_S:1, 255:8, _F:23, Rest/binary>>) ->
+  {ok, nan, Rest};
+decode_float(16#fa, <<F:32/float, Rest/binary>>) ->
+  {ok, F, Rest};
+%% Double precision
+decode_float(16#fb, <<_S:1, 0:11, 0:52, Rest/binary>>) ->
+  {ok, 0.0, Rest};
+decode_float(16#fb, <<0:1, 2047:11, 0:52, Rest/binary>>) ->
+  {ok, positive_infinity, Rest};
+decode_float(16#fb, <<1:1, 2047:11, 0:52, Rest/binary>>) ->
+  {ok, negative_infinity, Rest};
+decode_float(16#fb, <<_S:1, 2047:11, _F:52, Rest/binary>>) ->
+  {ok, nan, Rest};
+decode_float(16#fb, <<F:64/float, Rest/binary>>) ->
+  {ok, F, Rest};
+%% Truncated
+decode_float(_Tag, _Data) ->
+  {error, truncated_float}.
 
 %% @doc Decode a fixed number of consecutive CBOR data items and return them
 %% as a list.

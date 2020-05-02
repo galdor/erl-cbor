@@ -39,7 +39,7 @@ encode_test() ->
   ?assertEqual("29", Encode(-10)),
   ?assertEqual("3863", Encode(-100)),
   ?assertEqual("3903e7", Encode(-1000)),
-  %% Floating point numbers
+  %% Floats
   ?assertEqual("fb0000000000000000", Encode(0.0)), % canonical: f90000
   ?assertEqual("fb0000000000000000", Encode(-0.0)), % canonical: f98000
   ?assertEqual("fb3ff0000000000000", Encode(1.0)), % canonical: f93c00
@@ -53,7 +53,6 @@ encode_test() ->
   ?assertEqual("fb3f10000000000000", Encode(0.00006103515625)), % canonical: f90400
   ?assertEqual("fbc010000000000000", Encode(-4.0)), % canonical: f9c400
   ?assertEqual("fbc010666666666666", Encode(-4.1)),
-  ?assertEqual("f97c00", Encode(infinity)),
   ?assertEqual("f97c00", Encode(positive_infinity)),
   ?assertEqual("f9fc00", Encode(negative_infinity)),
   ?assertEqual("f97e00", Encode(nan)),
@@ -207,4 +206,27 @@ decode_test() ->
   ?assertEqual(false, Decode("f4")),
   ?assertEqual(true, Decode("f5")),
   ?assertEqual(null, Decode("f6")),
-  ?assertEqual(undefined, Decode("f7")).
+  ?assertEqual(undefined, Decode("f7")),
+  %% Floating point numbers
+  ?assertEqual(0.0, Decode("f90000")),
+  ?assertEqual(-0.0, Decode("f98000")),
+  ?assertEqual(1.0, Decode("f93c00")),
+  ?assertEqual(1.1, Decode("fb3ff199999999999a")),
+  ?assertEqual(1.5, Decode("f93e00")),
+  ?assertEqual(65504.0, Decode("f97bff")),
+  ?assertEqual(100000.0, Decode("fa47c35000")),
+  ?assertEqual(3.4028234663852886e+38, Decode("fa7f7fffff")),
+  ?assertEqual(1.0e+300, Decode("fb7e37e43c8800759c")),
+  ?assertEqual(5.960464477539063e-8, Decode("f90001")),
+  ?assertEqual(0.00006103515625, Decode("f90400")),
+  ?assertEqual(-4.0, Decode("f9c400")),
+  ?assertEqual(-4.1, Decode("fbc010666666666666")),
+  ?assertEqual(positive_infinity, Decode("f97c00")),
+  ?assertEqual(positive_infinity, Decode("fa7f800000")),
+  ?assertEqual(positive_infinity, Decode("fb7ff0000000000000")),
+  ?assertEqual(negative_infinity, Decode("f9fc00")),
+  ?assertEqual(negative_infinity, Decode("faff800000")),
+  ?assertEqual(negative_infinity, Decode("fbfff0000000000000")),
+  ?assertEqual(nan, Decode("f97e00")),
+  ?assertEqual(nan, Decode("fa7fc00000")),
+  ?assertEqual(nan, Decode("fb7ff8000000000000")).
