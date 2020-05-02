@@ -273,54 +273,49 @@ decode(Data) ->
 %% value it represents and the rest of the binary data which were not decoded.
 -spec decode(iodata(), decoding_options()) ->
         {ok, term(), iodata()} | {error, term()}.
-decode(<<Tag:8, Data/binary>>, Opts) ->
-  decode1(Tag, Data, Opts).
-
--spec decode1(Tag, iodata(), decoding_options()) -> decoding_result(term()) when
-    Tag :: byte().
-decode1(Tag, Data, _Opts) when Tag =< 16#17 ->
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag =< 16#17 ->
   {ok, Tag, Data};
-decode1(Tag, Data, _Opts) when Tag >= 16#18 andalso Tag =< 16#1b ->
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#18 andalso Tag =< 16#1b ->
   decode_unsigned_integer(Tag, Data);
-decode1(Tag, Data, _Opts) when Tag >= 16#20 andalso Tag =< 16#37 ->
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#20 andalso Tag =< 16#37 ->
   {ok, -1 - (Tag - 16#20), Data};
-decode1(Tag, Data, _Opts) when Tag >= 16#38 andalso Tag =< 16#3b ->
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#38 andalso Tag =< 16#3b ->
   decode_negative_integer(Tag, Data);
-decode1(Tag, Data, _Opts) when Tag >= 16#40 andalso Tag =< 16#5b ->
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#40 andalso Tag =< 16#5b ->
   decode_byte_string(Tag, Data);
-decode1(16#5f, _Data, _Opts) ->
+decode(<<16#5f:8, _Data/binary>>, _Opts) ->
   %% TODO undefinite length byte strings
   {error, unsupported_undefinite_length_byte_string};
-decode1(Tag, Data, _Opts) when Tag >= 16#60 andalso Tag =< 16#7b ->
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#60 andalso Tag =< 16#7b ->
   decode_utf8_string(Tag, Data);
-decode1(16#7f, _Data, _Opts) ->
+decode(<<16#7f:8, _Data/binary>>, _Opts) ->
   %% TODO undefinite length utf-8 strings
   {error, unsupported_undefinite_length_utf8_string};
-decode1(Tag, Data, _Opts) when Tag >= 16#80 andalso Tag =< 16#9b ->
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#80 andalso Tag =< 16#9b ->
   decode_array(Tag, Data);
-decode1(16#9f, _Data, _Opts) ->
+decode(<<16#9f:8, _Data/binary>>, _Opts) ->
   %% TODO undefinite length arrays
   {error, unsupported_undefinite_length_array};
-decode1(Tag, Data, _Opts) when Tag >= 16#a0 andalso Tag =< 16#bb ->
-  %% TODO undefinite length maps
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#a0 andalso Tag =< 16#bb ->
   decode_map(Tag, Data);
-decode1(16#bf, _Data, _Opts) ->
+decode(<<16#bf:8, _Data/binary>>, _Opts) ->
+  %% TODO undefinite length maps
   {error, unsupported_undefinite_length_map};
 % TODO c0-d4 tagged items
 % TODO d5-d7 "expected conversion"
 % TODO d8-db extended tagged items
 % TODO e0-f3 simple values
-decode1(16#f4, Data, _Opts) ->
+decode(<<16#f4:8, Data/binary>>, _Opts) ->
   {ok, false, Data};
-decode1(16#f5, Data, _Opts) ->
+decode(<<16#f5:8, Data/binary>>, _Opts) ->
   {ok, true, Data};
-decode1(16#f6, Data, _Opts) ->
+decode(<<16#f6:8, Data/binary>>, _Opts) ->
   {ok, null, Data};
-decode1(16#f7, Data, _Opts) ->
+decode(<<16#f7:8, Data/binary>>, _Opts) ->
   {ok, undefined, Data};
 % TODO f8 simple value
 % TODO f9-fb floating point numbers
-decode1(Tag, _Data, _Opts) ->
+decode(<<Tag:8, _Data/binary>>, _Opts) ->
   {error, {invalid_tag, Tag}}.
 
 %% @doc Decode a CBOR data item from an hex-encoded string and return both the
