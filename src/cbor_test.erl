@@ -167,11 +167,7 @@ decode_test() ->
   ?assertEqual(1000000, Decode("1a000f4240")),
   ?assertEqual(1000000000000, Decode("1b000000e8d4a51000")),
   ?assertEqual(18446744073709551615, Decode("1bffffffffffffffff")),
-  %% TODO bignum
-  %% ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
   ?assertEqual(-18446744073709551616, Decode("3bffffffffffffffff")),
-  %% TODO bignum
-  %% ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
   ?assertEqual(-1, Decode("20")),
   ?assertEqual(-10, Decode("29")),
   ?assertEqual(-100, Decode("3863")),
@@ -225,6 +221,21 @@ decode_test() ->
   ?assertEqual(#{<<"a">> => 1, <<"b">> => [2, 3]},
                Decode("bf61610161629f0203ffff")),
   ?assertEqual([<<"a">>, #{<<"b">> => <<"c">>}], Decode("824161a141624163")),
+  %% Tagged values
+  ?assertEqual({6, 0}, Decode("c600")),
+  ?assertEqual({42, true}, Decode("d82af5")),
+  ?assertEqual({4114, 1}, Decode("d9101201")),
+  ?assertEqual({251658240, null}, Decode("da0f000000f6")),
+  ?assertEqual({1311768465173141112, 0}, Decode("db123456781234567800")),
+  ?assertEqual(<<"http://example.com">>,
+               Decode("d82072687474703a2f2f6578616d706c652e636f6d")),
+  ?assertEqual(<<"a+b?">>, Decode("d82364612b623f")),
+  ?assertEqual(<<"Subject: hello\r\n\r\nworld">>,
+               Decode("d824775375626a6563743a2068656c6c6f0d0a0d0a776f726c64")),
+  ?assertEqual(42, Decode("d9d9f7182a")),
+  %% TODO bignum
+  %% ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
+  %% ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
   %% Simple values
   ?assertEqual({simple_value, 0}, Decode("e0")),
   ?assertEqual({simple_value, 10}, Decode("ea")),

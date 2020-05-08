@@ -18,10 +18,23 @@
 %% @reference See <a href="https://tools.ietf.org/html/rfc7049">RFC 7049</a>.
 -module(cbor).
 
--export([encode/1, encode_hex/1,
+-export([default_tagged_value_interpreters/0,
+         default_decoding_options/0,
+         encode/1, encode_hex/1,
          decode/1, decode/2, decode_hex/1, decode_hex/2]).
 
--export_type([float_value/0, decoding_options/0, decoding_option/0]).
+-export_type([tag/0,
+              tagged_value/0, simple_value/0, float_value/0,
+              tagged_value_interpreter/0,
+              decoding_options/0,
+              interpretation_result/1]).
+
+-type tag() :: non_neg_integer().
+%% A semantic tag as defined in RFC 7049 2.4.
+
+-type tagged_value() :: {tag(), term()}.
+%% A CBOR tagged value, i.e. a value with an integer tag acting like a
+%% semantic hint.
 
 -type simple_value() :: {simple_value, 0..255}
                       | false | true | null | undefined.
@@ -34,17 +47,50 @@
 %% could add a `negative_zero' value, but it would be inconsistent compared to
 %% the handling of positive zero.
 
--type decoding_options() :: [decoding_option()].
-%% A set of options affecting CBOR decoding.
-
-% TODO
--type decoding_option() :: term().
-%% An option affecting CBOR decoding.
+-type decoding_options() :: #{tagged_value_interpreters =>
+                                #{tag() := tagged_value_interpreter()}}.
+%% A set of options affecting CBOR decoding:
 %% <dl>
+%%   <dt>`tagged_value_interpreters'</dt>
+%%   <dd>
+%%     A map containing a tagged value interpreter function for each supported
+%%     tagged value. Unsupported tagged values will be decoded to a tuple of
+%%     the form `{Tag, Value}'.
+%%   </dd>
 %% </dl>
+
+-type tagged_value_interpreter() :: fun((tagged_value()) ->
+                                           interpretation_result(term())).
+%% A function used to interpret a CBOR tagged value.
 
 -type decoding_result(ValueType) :: {ok, ValueType, iodata()} | {error, term()}.
 %% The type of values returned by decoding functions.
+
+-type interpretation_result(ValueType) :: {ok, ValueType} | {error, term()}.
+%% The type of values returned by interpretation functions.
+
+%% @doc Return the default map of tagged value interpreters.
+-spec default_tagged_value_interpreters() ->
+        #{tag() := tagged_value_interpreter()}.
+default_tagged_value_interpreters() ->
+  #{
+    %% 0 => fun interpret_standard_datetime/1,
+    %% 1 => fun interpret_epoch_based_datetime/1,
+    %% 2 => fun interpret_positive_bignum/1,
+    %% 3 => fun interpret_negative_bignum/1,
+    %% 24 => fun interpret_cbor_value/1,
+    32 => fun interpret_value/1,
+    %% 33 => fun interpret_base64url_data/1,
+    %% 34 => fun interpret_base64_data/1,
+    35 => fun interpret_value/1,
+    36 => fun interpret_value/1,
+    55799 => fun interpret_value/1
+}.
+
+%% @doc Return the default list of decoding options.
+-spec default_decoding_options() -> decoding_options().
+default_decoding_options() ->
+  #{tagged_value_interpreters => default_tagged_value_interpreters()}.
 
 %% @doc Encode an Erlang value and return the binary representation of the
 %% resulting CBOR data item.
@@ -54,19 +100,19 @@
 %%
 %% Atoms are used for specific constants:
 %% <dl>
-%%   <dt>positive_infinity</dt>
+%%   <dt>`positive_infinity'</dt>
 %%   <dd>IEEE.754 positive infinity.</dd>
 %%
-%%   <dt>negative_infinity</dt>
+%%   <dt>`negative_infinity'</dt>
 %%   <dd>IEEE.754 negative infinity.</dd>
 %%
-%%   <dt>nan</dt>
+%%   <dt>`nan'</dt>
 %%   <dd>IEEE.754 NaN.</dd>
 %%
-%%   <dt>null</dt>
+%%   <dt>`null'</dt>
 %%   <dd>CBOR null value.</dd>
 %%
-%%   <dt>undefined</dt>
+%%   <dt>`undefined'</dt>
 %%   <dd>CBOR undefined value.</dd>
 %% </dl>
 %%
@@ -255,7 +301,7 @@ encode_timestamp(Datetime) ->
   end.
 
 %% @doc Encode a value preceded by a semantic tag.
--spec encode_tagged_value(non_neg_integer(), term()) -> iodata().
+-spec encode_tagged_value(tag(), term()) -> iodata().
 encode_tagged_value(Tag, Value) when Tag =< 16#17 ->
   [<<6:3, Tag:5>>, encode(Value)];
 encode_tagged_value(Tag, Value) when Tag =< 16#ff ->
@@ -275,10 +321,108 @@ encode_tagged_value(Tag, _Value) ->
 %% @see decode/2
 -spec decode(iodata()) -> decoding_result(term()).
 decode(Data) ->
-  decode(Data, []).
+  decode(Data, default_decoding_options()).
 
 %% @doc Decode a CBOR data item from binary data and return both the Erlang
 %% value it represents and the rest of the binary data which were not decoded.
+%%
+%% CBOR values are converted to Erlang values as follows:
+%% <ul>
+%%   <li>
+%%     CBOR integers, unsigned integers, and negative integers are converted
+%%     to Erlang integers.
+%%   </li>
+%%   <li>
+%%     CBOR byte strings are converted to Erlang binaries.
+%%   </li>
+%%   <li>
+%%     CBOR UTF-8 strings are validated and converted to Erlang binaries.
+%%   </li>
+%%   <li>
+%%     CBOR arrays are converted to Erlang lists.
+%%   </li>
+%%   <li>
+%%     CBOR maps are converted to Erlang maps.
+%%   </li>
+%%   <li>
+%%     CBOR tagged values are converted either to tuples of the form `{Tag,
+%%     Value}' or, for specific tags, to the following Erlang values:
+%%     <dl>
+%%      <dt>0 (standard datetime)</dt>
+%%      <dd>
+%%        TODO standard datetime
+%%      </dd>
+%%      <dt>1 (epoch-based datetime)</dt>
+%%      <dd>
+%%        TODO epoch-based datetime
+%%      </dd>
+%%      <dt>2 (positive bignum)</dt>
+%%      <dt>3 (negative bignum)</dt>
+%%      <dd>
+%%        An Erlang integer.
+%%      </dd>
+%%      <dt>24 (CBOR data)</dt>
+%%      <dd>
+%%        An Erlang value formed by decoding the CBOR-encoded byte string.
+%%      </dd>
+%%      <dt>32 (URI)</dt>
+%%      <dd>
+%%        An Erlang binary string containing the URI. While it would be
+%%        possible to parse the URI string, using for example the `uri_string'
+%%        module, it would not be practical since most functions using URIs
+%%        expect the textual representation.
+%%      </dd>
+%%      <dt>33 (base64url-encoded data)</dt>
+%%      <dd>
+%%        An Erlang binary formed by decoding the base64url-encoded UTF-8
+%%        string.
+%%      </dd>
+%%      <dt>34 (base64-encoded data)</dt>
+%%      <dd>
+%%        An Erlang binary formed by decoding the base64-encoded UTF-8 string.
+%%      </dd>
+%%      <dt>35 (regular expression)</dt>
+%%      <dd>
+%%        An Erlang binary string containing the regular expression.
+%%      </dd>
+%%      <dt>36 (MIME message)</dt>
+%%      <dd>
+%%        An Erlang binary string containing the MIME message.
+%%      </dd>
+%%      <dt>55799 (CBOR value)</dt>
+%%      <dd>
+%%        An Erlang value formed by decoding the tagged value.
+%%      </dd>
+%%     </dl>
+%%     We do not interpret:
+%%     <ul>
+%%       <li>
+%%         decimal fractions and big floats, because Erlang do not have data
+%%         types to store them;
+%%       </li>
+%%       <li>
+%%         expected encoding to base64url, base64 and base16 (tags 21 to 23)
+%%         because the resulting encoded data would be ambiguous.
+%%       </li>
+%%     </ul>
+%%   </li>
+%%   <li>
+%%     CBOR simple values are converted either to tuples of the form
+%%     `{simple_value, Integer}' or, for specific numeric values, to the
+%%     following Erlang values:
+%%     <dl>
+%%      <dt>20</dt><dd>`false'</dd>
+%%      <dt>21</dt><dd>`true'</dd>
+%%      <dt>22</dt><dd>`null'</dd>
+%%      <dt>23</dt><dd>`undefined'</dd>
+%%     </dl>
+%%   </li>
+%%   <li>
+%%     CBOR floats are converted to Erlang floats. NaN is converted to the
+%%     `nan' atom. Positive and negative infinity values are converted
+%%     respectively to the `positive_infinity' and `negative_infinity' atoms.
+%%   </li>
+%% </ul>
 -spec decode(iodata(), decoding_options()) ->
         {ok, term(), iodata()} | {error, term()}.
 decode(<<Tag:8, Data/binary>>, _Opts) when Tag =< 16#17 ->
@@ -305,9 +449,8 @@ decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#a0 andalso Tag =< 16#bb ->
   decode_map(Tag, Data);
 decode(<<16#bf:8, Data/binary>>, _Opts) ->
   decode_indefinite_length_map(Data);
-% TODO c0-d4 tagged items
-% TODO d5-d7 "expected conversion"
-% TODO d8-db extended tagged items
+decode(<<Tag:8, Data/binary>>, Opts) when Tag >= 16#c0 andalso Tag =< 16#db ->
+  decode_tagged_value(Tag, Data, Opts);
 decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#e0 andalso Tag =< 16#f8 ->
   decode_simple_value(Tag, Data);
 decode(<<Tag, Data/binary>>, _Opts) when Tag >= 16#f9 andalso Tag =< 16#fb ->
@@ -322,7 +465,7 @@ decode(<<Tag:8, _Data/binary>>, _Opts) ->
 %% @see decode/1
 -spec decode_hex(string()) -> decoding_result(term()).
 decode_hex(Value) ->
-  decode_hex(Value, []).
+  decode_hex(Value, default_decoding_options()).
 
 %% @doc Decode a CBOR data item from an hex-encoded string and return both the
 %% Erlang value it represents and the rest of the string which was not
@@ -489,6 +632,59 @@ decode_indefinite_length_map(Data) ->
     {error, Reason} ->
       {error, Reason}
   end.
+
+%% @doc Decode a CBOR tagged value. If the tag is supported, return a suitable
+%% Erlang value; if it is not, return a tuple of the form `{Tag, Value}'.
+-spec decode_tagged_value(Tag, iodata(), Opts) -> decoding_result(Result) when
+    Tag :: 16#c0..16#db,
+    Opts :: decoding_options(),
+    Result :: tagged_value() | term().
+decode_tagged_value(Tag, Data, Opts) when Tag >= 16#c0 andalso Tag =< 16#d7 ->
+  decode_tagged_data(Tag - 16#c0, Data, Opts);
+decode_tagged_value(16#d8, <<Tag:8, Data/binary>>, Opts) ->
+  decode_tagged_data(Tag, Data, Opts);
+decode_tagged_value(16#d9, <<Tag:16, Data/binary>>, Opts) ->
+  decode_tagged_data(Tag, Data, Opts);
+decode_tagged_value(16#da, <<Tag:32, Data/binary>>, Opts) ->
+  decode_tagged_data(Tag, Data, Opts);
+decode_tagged_value(16#db, <<Tag:64, Data/binary>>, Opts) ->
+  decode_tagged_data(Tag, Data, Opts);
+decode_tagged_value(_Tag, _Data, _Opts) ->
+  {error, truncated_tagged_value}.
+
+-spec decode_tagged_data(tag(), iodata(), decoding_options()) ->
+        decoding_result(Result) when
+    Result :: tagged_value() | term().
+decode_tagged_data(Tag, Data, Opts) ->
+  case decode(Data) of
+    {ok, Value, Rest} ->
+      case interpret_tagged_value({Tag, Value}, Opts) of
+        {ok, Value2} ->
+          {ok, Value2, Rest};
+        {error, Reason} ->
+          {error, Reason}
+      end;
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+-spec interpret_tagged_value(tagged_value(), decoding_options()) ->
+        interpretation_result(term()).
+interpret_tagged_value(TaggedValue = {Tag, _Value},
+                       #{tagged_value_interpreters := Interpreters}) ->
+  case maps:find(Tag, Interpreters) of
+    {ok, Interpreter} ->
+      Interpreter(TaggedValue);
+    error ->
+      {ok, TaggedValue}
+  end;
+interpret_tagged_value(TaggedValue, _Opts) ->
+  {ok, TaggedValue}.
+
+%% @doc Interpret a value by returning it without any transformation.
+-spec interpret_value(tagged_value()) -> interpretation_result(term()).
+interpret_value({_Tag, Value}) ->
+  {ok, Value}.
 
 %% @doc Decode a CBOR simple value. Numeric simple values are decoded to
 %% Erlang integers. Others are decoded to Erlang atoms.
