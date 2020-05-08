@@ -225,11 +225,16 @@ decode_test() ->
   ?assertEqual(#{<<"a">> => 1, <<"b">> => [2, 3]},
                Decode("bf61610161629f0203ffff")),
   ?assertEqual([<<"a">>, #{<<"b">> => <<"c">>}], Decode("824161a141624163")),
-  % Simple values
+  %% Simple values
+  ?assertEqual({simple_value, 0}, Decode("e0")),
+  ?assertEqual({simple_value, 10}, Decode("ea")),
+  ?assertEqual({simple_value, 19}, Decode("f3")),
   ?assertEqual(false, Decode("f4")),
   ?assertEqual(true, Decode("f5")),
   ?assertEqual(null, Decode("f6")),
   ?assertEqual(undefined, Decode("f7")),
+  ?assertEqual({simple_value, 0}, Decode("f800")),
+  ?assertEqual({simple_value, 255}, Decode("f8ff")),
   %% Floating point numbers
   ?assertEqual(0.0, Decode("f90000")),
   ?assertEqual(-0.0, Decode("f98000")),

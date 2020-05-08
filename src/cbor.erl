@@ -23,6 +23,10 @@
 
 -export_type([float_value/0, decoding_options/0, decoding_option/0]).
 
+-type simple_value() :: {simple_value, 0..255}
+                      | false | true | null | undefined.
+%% A simple CBOR value as defined in RFC 7049 2.3.
+
 -type float_value() :: float() | positive_infinity | negative_infinity | nan.
 %% A floating point type extending the standard `float/0' type to support
 %% IEEE.754 special values. Note that we do not include a value for negative
@@ -304,16 +308,8 @@ decode(<<16#bf:8, Data/binary>>, _Opts) ->
 % TODO c0-d4 tagged items
 % TODO d5-d7 "expected conversion"
 % TODO d8-db extended tagged items
-% TODO e0-f3 simple values
-decode(<<16#f4:8, Data/binary>>, _Opts) ->
-  {ok, false, Data};
-decode(<<16#f5:8, Data/binary>>, _Opts) ->
-  {ok, true, Data};
-decode(<<16#f6:8, Data/binary>>, _Opts) ->
-  {ok, null, Data};
-decode(<<16#f7:8, Data/binary>>, _Opts) ->
-  {ok, undefined, Data};
-% TODO f8 simple value
+decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#e0 andalso Tag =< 16#f8 ->
+  decode_simple_value(Tag, Data);
 decode(<<Tag, Data/binary>>, _Opts) when Tag >= 16#f9 andalso Tag =< 16#fb ->
   decode_float(Tag, Data);
 decode(<<Tag:8, _Data/binary>>, _Opts) ->
@@ -493,6 +489,26 @@ decode_indefinite_length_map(Data) ->
     {error, Reason} ->
       {error, Reason}
   end.
+
+%% @doc Decode a CBOR simple value. Numeric simple values are decoded to
+%% Erlang integers. Others are decoded to Erlang atoms.
+-spec decode_simple_value(Tag, iodata()) -> decoding_result(simple_value()) when
+    Tag :: 16#e9..16#f8.
+decode_simple_value(Tag, <<Data/binary>>) when
+    Tag >= 16#e0 andalso Tag =< 16#f3 ->
+  {ok, {simple_value, Tag - 16#e0}, Data};
+decode_simple_value(16#f4, <<Data/binary>>) ->
+  {ok, false, Data};
+decode_simple_value(16#f5, <<Data/binary>>) ->
+  {ok, true, Data};
+decode_simple_value(16#f6, <<Data/binary>>) ->
+  {ok, null, Data};
+decode_simple_value(16#f7, <<Data/binary>>) ->
+  {ok, undefined, Data};
+decode_simple_value(16#f8, <<Value:8, Data/binary>>) ->
+  {ok, {simple_value, Value}, Data};
+decode_simple_value(16#f8, <<>>) ->
+  {error, truncated_simple_value}.
 
 %% @doc Decode a CBOR floating point number to an Erlang float. We have to
 %% manually decode half-precision floating point numbers because the Erlang
