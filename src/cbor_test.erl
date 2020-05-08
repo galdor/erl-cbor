@@ -167,20 +167,25 @@ decode_test() ->
   ?assertEqual(1000000, Decode("1a000f4240")),
   ?assertEqual(1000000000000, Decode("1b000000e8d4a51000")),
   ?assertEqual(18446744073709551615, Decode("1bffffffffffffffff")),
+  %% TODO bignum
   %% ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
   ?assertEqual(-18446744073709551616, Decode("3bffffffffffffffff")),
+  %% TODO bignum
   %% ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
   ?assertEqual(-1, Decode("20")),
   ?assertEqual(-10, Decode("29")),
   ?assertEqual(-100, Decode("3863")),
   ?assertEqual(-1000, Decode("3903e7")),
-  %% Binary data
+  %% Byte strings
   ?assertEqual(<<>>, Decode("40")),
   ?assertEqual(<<1, 2, 3>>, Decode("43010203")),
   ?assertEqual(<<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
                  17, 18, 19, 20, 21, 22, 23, 24>>,
                Decode("58180102030405060708090a0b0c0d0e0f101112131415161718")),
-  %% Strings
+  %% Indefinite length byte strings
+  ?assertEqual(<<>>, Decode("5fff")),
+  ?assertEqual(<<1, 2, 3>>, Decode("5f010203ff")),
+  %% UTF-8 strings
   ?assertEqual(<<"">>, Decode("60")),
   ?assertEqual(<<"a">>, Decode("6161")),
   ?assertEqual(<<"IETF">>, Decode("6449455446")),
@@ -188,6 +193,10 @@ decode_test() ->
   ?assertEqual(<<16#fc/utf8>>, Decode("62c3bc")),
   ?assertEqual(<<16#6c34/utf8>>, Decode("63e6b0b4")),
   ?assertEqual(<<16#10151/utf8>>, Decode("64f0908591")),
+  %% Indefinite length UTF-8 strings
+  ?assertEqual(<<"">>, Decode("7fff")),
+  ?assertEqual(<<"a">>, Decode("7f61ff")),
+  ?assertEqual(<<"IETF">>, Decode("7f49455446ff")),
   %% Arrays
   ?assertEqual([], Decode("80")),
   ?assertEqual([1, 2, 3], Decode("83010203")),
@@ -195,12 +204,26 @@ decode_test() ->
   ?assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
                 17, 18, 19, 20, 21, 22, 23, 24, 25],
                Decode("98190102030405060708090a0b0c0d0e0f101112131415161718181819")),
+  %% Indefinite-length arrays
+  ?assertEqual([], Decode("9fff")),
+  ?assertEqual([1, 2, 3], Decode("9f010203ff")),
+  ?assertEqual([1, [2, 3], [4, 5]], Decode("9f018202039f0405ffff")),
+  ?assertEqual([1, [2, 3], [4, 5]], Decode("83018202039f0405ff")),
+  ?assertEqual([1, [2, 3], [4, 5]], Decode("83018202039f0405ff")),
+  ?assertEqual([1, [2, 3], [4, 5]], Decode("83019f0203ff820405")),
   %% Maps
   ?assertEqual(#{}, Decode("a0")),
-  ?assertEqual(#{1 => 2, 3 => 4}, Decode("a201020304")),
+  ?assertEqual(#{1 => 2, 3 => 4}, Decode("a201020304ff")),
+  %% Indefinite-length maps
+  ?assertEqual(#{}, Decode("bfff")),
+  ?assertEqual(#{1 => 2, 3 => 4}, Decode("bf01020304ff")),
+  ?assertEqual(#{<<"Fun">> => true, <<"Amt">> => -2},
+               Decode("bf6346756ef563416d7421ff")),
   %% Mixed arrays and maps
   ?assertEqual(#{<<"a">> => 1, <<"b">> => [2, 3]},
                Decode("a24161014162820203")),
+  ?assertEqual(#{<<"a">> => 1, <<"b">> => [2, 3]},
+               Decode("bf61610161629f0203ffff")),
   ?assertEqual([<<"a">>, #{<<"b">> => <<"c">>}], Decode("824161a141624163")),
   % Simple values
   ?assertEqual(false, Decode("f4")),

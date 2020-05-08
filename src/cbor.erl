@@ -287,24 +287,20 @@ decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#38 andalso Tag =< 16#3b ->
   decode_negative_integer(Tag, Data);
 decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#40 andalso Tag =< 16#5b ->
   decode_byte_string(Tag, Data);
-decode(<<16#5f:8, _Data/binary>>, _Opts) ->
-  %% TODO undefinite length byte strings
-  {error, unsupported_undefinite_length_byte_string};
+decode(<<16#5f:8, Data/binary>>, _Opts) ->
+  decode_indefinite_length_byte_string(Data);
 decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#60 andalso Tag =< 16#7b ->
   decode_utf8_string(Tag, Data);
-decode(<<16#7f:8, _Data/binary>>, _Opts) ->
-  %% TODO undefinite length utf-8 strings
-  {error, unsupported_undefinite_length_utf8_string};
+decode(<<16#7f:8, Data/binary>>, _Opts) ->
+  decode_indefinite_length_utf8_string(Data);
 decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#80 andalso Tag =< 16#9b ->
   decode_array(Tag, Data);
-decode(<<16#9f:8, _Data/binary>>, _Opts) ->
-  %% TODO undefinite length arrays
-  {error, unsupported_undefinite_length_array};
+decode(<<16#9f:8, Data/binary>>, _Opts) ->
+  decode_indefinite_length_array(Data);
 decode(<<Tag:8, Data/binary>>, _Opts) when Tag >= 16#a0 andalso Tag =< 16#bb ->
   decode_map(Tag, Data);
-decode(<<16#bf:8, _Data/binary>>, _Opts) ->
-  %% TODO undefinite length maps
-  {error, unsupported_undefinite_length_map};
+decode(<<16#bf:8, Data/binary>>, _Opts) ->
+  decode_indefinite_length_map(Data);
 % TODO c0-d4 tagged items
 % TODO d5-d7 "expected conversion"
 % TODO d8-db extended tagged items
@@ -389,8 +385,21 @@ decode_byte_string(Tag, Data) ->
       {error, truncated_byte_string}
   end.
 
-%% @doc Decode a CBOR UTF-8 string to an Erlang binary. Invalid or incomplete
-%% UTF-8 sequence cause a decoding error.
+%% @doc Decode a CBOR binary string without an explicite length to an Erlang
+%% binary.
+-spec decode_indefinite_length_byte_string(iodata()) ->
+        decoding_result(binary()).
+decode_indefinite_length_byte_string(Data) ->
+  case binary:match(Data, <<255:8>>) of
+    {Off, _Len} ->
+      <<Bin:Off/binary, 255:8, Rest/binary>> = Data,
+      {ok, Bin, Rest};
+    nomatch ->
+      {error, truncated_byte_string}
+  end.
+
+%% @doc Decode a CBOR UTF-8 string to an Erlang binary. An invalid or
+%% incomplete UTF-8 sequence causes a decoding error.
 -spec decode_utf8_string(Tag, iodata()) -> decoding_result(binary()) when
     Tag :: 16#60..16#7b.
 decode_utf8_string(Tag, Data) ->
@@ -410,12 +419,45 @@ decode_utf8_string(Tag, Data) ->
       {error, truncated_utf8_string}
   end.
 
+%% @doc Decode a CBOR UTF-8 string without an explicite length to an Erlang
+%% binary. An invalid or incomplete UTF-8 sequence causes a decoding error.
+-spec decode_indefinite_length_utf8_string(iodata()) ->
+        decoding_result(binary()).
+decode_indefinite_length_utf8_string(Data) ->
+  case binary:match(Data, <<255:8>>) of
+    {Off, _Len} ->
+      <<Bin:Off/binary, 255:8, Rest/binary>> = Data,
+      Str = case unicode:characters_to_binary(Bin) of
+              Bin2 when is_binary(Bin2) ->
+                Bin2;
+              {error, _, _} ->
+                {error, {invalid_utf8_string, Bin}};
+              {incomplete, _, _} ->
+                {error, {incomplete_utf8_string, Bin}}
+            end,
+      {ok, Str, Rest};
+    nomatch ->
+      {error, truncated_utf8_string}
+  end.
+
 %% @doc Decode a CBOR array to an Erlang list.
 -spec decode_array(Tag, iodata()) -> decoding_result(list()) when
     Tag :: 16#80..16#9b.
 decode_array(Tag, Data) ->
   {Len, Data2} = cbor_util:decode_sequence_header(Tag, Data),
-  case decode_sequence(Data2, Len, []) of
+  case decode_values(Data2, Len, []) of
+    {ok, Values, Rest} ->
+      {ok, Values, Rest};
+    {error, truncated_sequence} ->
+      {error, truncated_array};
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% @doc Decode a CBOR array without an explicite length to an Erlang list.
+-spec decode_indefinite_length_array(iodata()) -> decoding_result(list()).
+decode_indefinite_length_array(Data) ->
+  case decode_indefinite_length_values(Data, []) of
     {ok, Values, Rest} ->
       {ok, Values, Rest};
     {error, truncated_sequence} ->
@@ -429,7 +471,21 @@ decode_array(Tag, Data) ->
     Tag :: 16#a0..16#bb.
 decode_map(Tag, Data) ->
   {Len, Data2} = cbor_util:decode_sequence_header(Tag, Data),
-  case decode_sequence(Data2, Len*2, []) of
+  case decode_values(Data2, Len*2, []) of
+    {ok, Values, Rest} ->
+      {ok, cbor_util:list_to_map(Values), Rest};
+    {error, truncated_sequence} ->
+      {error, truncated_map};
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% @doc Decode a CBOR map without an explicite length to an Erlang map.
+-spec decode_indefinite_length_map(iodata()) -> decoding_result(map()).
+decode_indefinite_length_map(Data) ->
+  case decode_indefinite_length_values(Data, []) of
+    {ok, Values, _Rest} when (length(Values) rem 2) /= 0 ->
+      {error, odd_number_of_map_values};
     {ok, Values, Rest} ->
       {ok, cbor_util:list_to_map(Values), Rest};
     {error, truncated_sequence} ->
@@ -486,15 +542,32 @@ decode_float(_Tag, _Data) ->
 
 %% @doc Decode a fixed number of consecutive CBOR data items and return them
 %% as a list.
--spec decode_sequence(iodata(), non_neg_integer(), list()) -> decoding_result(list()).
-decode_sequence(Data, 0, Acc) ->
+-spec decode_values(iodata(), non_neg_integer(), list()) ->
+        decoding_result(list()).
+decode_values(Data, 0, Acc) ->
   {ok, lists:reverse(Acc), Data};
-decode_sequence(<<>>, _N, _Acc) ->
+decode_values(<<>>, _N, _Acc) ->
   {error, truncated_sequence};
-decode_sequence(Data, N, Acc) ->
+decode_values(Data, N, Acc) ->
   case decode(Data) of
     {ok, Value, Rest} ->
-      decode_sequence(Rest, N-1, [Value | Acc]);
+      decode_values(Rest, N-1, [Value | Acc]);
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% @doc Decode multiple consecutive CBOR data items until a break tag is
+%% found and return them as a list.
+-spec decode_indefinite_length_values(iodata(), list()) ->
+        decoding_result(list()).
+decode_indefinite_length_values(<<>>, _Acc) ->
+  {error, truncated_sequence};
+decode_indefinite_length_values(<<16#ff:8, Data/binary>>, Acc) ->
+  {ok, lists:reverse(Acc), Data};
+decode_indefinite_length_values(Data, Acc) ->
+  case decode(Data) of
+    {ok, Value, Rest} ->
+      decode_indefinite_length_values(Rest, [Value | Acc]);
     {error, Reason} ->
       {error, Reason}
   end.
