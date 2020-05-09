@@ -12,13 +12,13 @@
 %% OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 %% PERFORMANCE OF THIS SOFTWARE.
 
--module(cbor_base64_test).
+-module(cbor_base64url_test).
 
 -include_lib("eunit/include/eunit.hrl").
 
 decode_test() ->
   Decode = fun (BinStr) ->
-               {ok, Bin} = cbor_base64:decode(BinStr),
+               {ok, Bin} = cbor_base64url:decode(BinStr),
                Bin
            end,
   ?assertEqual(<<"abc">>, Decode(<<"YWJj">>)),
@@ -31,5 +31,5 @@ decode_test() ->
   ?assertEqual(<<"a">>, Decode(<<"YQ==">>)),
   ?assertEqual(<<"a">>, Decode(<<"YQ">>)),
   ?assertEqual(<<"">>, Decode(<<"">>)),
-  ?assertEqual(<<16#fb>>, Decode(<<"+/==">>)),
-  ?assertEqual(<<16#fb>>, Decode(<<"+/">>)).
+  ?assertEqual(<<16#fb>>, Decode(<<"-_==">>)),
+  ?assertEqual(<<16#fb>>, Decode(<<"-_">>)).
