@@ -229,6 +229,9 @@ decode_test() ->
   ?assertEqual({1311768465173141112, 0}, Decode("db123456781234567800")),
   ?assertEqual(<<"http://example.com">>, % URI
                Decode("d82072687474703a2f2f6578616d706c652e636f6d")),
+  %% Tagged values - bignums
+  ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
+  ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
   %% Tagged values - CBOR-encoded value
   ?assertEqual(<<"abc">>, Decode("d8184443616263")),
   %% Tagged values - regular expression
@@ -238,9 +241,6 @@ decode_test() ->
                Decode("d824775375626a6563743a2068656c6c6f0d0a0d0a776f726c64")),
   %% Tagged values - self-described CBOR value
   ?assertEqual(42, Decode("d9d9f7182a")),
-  %% TODO bignum
-  %% ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
-  %% ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
   %% Simple values
   ?assertEqual({simple_value, 0}, Decode("e0")),
   ?assertEqual({simple_value, 10}, Decode("ea")),

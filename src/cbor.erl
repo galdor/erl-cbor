@@ -76,8 +76,8 @@ default_tagged_value_interpreters() ->
   #{
     %% 0 => fun interpret_standard_datetime/1,
     %% 1 => fun interpret_epoch_based_datetime/1,
-    %% 2 => fun interpret_positive_bignum/1,
-    %% 3 => fun interpret_negative_bignum/1,
+    2 => fun interpret_positive_bignum/1,
+    3 => fun interpret_negative_bignum/1,
     24 => fun interpret_cbor_value/1,
     32 => fun interpret_value/1,
     %% 33 => fun interpret_base64url_data/1,
@@ -685,6 +685,28 @@ interpret_tagged_value(TaggedValue, _Opts) ->
 -spec interpret_value(tagged_value()) -> interpretation_result(term()).
 interpret_value({_Tag, Value}) ->
   {ok, Value}.
+
+%% @doc Interpret a CBOR positive bignum by converting it to an Erlang
+%% integer.
+-spec interpret_positive_bignum(tagged_value()) ->
+        interpretation_result(integer()).
+interpret_positive_bignum({_Tag, Value}) when is_binary(Value) ->
+  Size = byte_size(Value) * 8,
+  <<N:Size>> = Value,
+  {ok, N};
+interpret_positive_bignum({_Tag, Value}) ->
+  {error, {invalid_bignum_value, Value}}.
+
+%% @doc Interpret a CBOR negative bignum by converting it to an Erlang
+%% integer.
+-spec interpret_negative_bignum(tagged_value()) ->
+        interpretation_result(integer()).
+interpret_negative_bignum({_Tag, Value}) when is_binary(Value) ->
+  Size = byte_size(Value) * 8,
+  <<N:Size>> = Value,
+  {ok, -1 - N};
+interpret_negative_bignum({_Tag, Value}) ->
+  {error, {invalid_bignum_value, Value}}.
 
 %% @doc Interpret a CBOR-encoded value by decoding it.
 -spec interpret_cbor_value(tagged_value()) -> interpretation_result(term()).
