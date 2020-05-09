@@ -78,7 +78,7 @@ default_tagged_value_interpreters() ->
     %% 1 => fun interpret_epoch_based_datetime/1,
     %% 2 => fun interpret_positive_bignum/1,
     %% 3 => fun interpret_negative_bignum/1,
-    %% 24 => fun interpret_cbor_value/1,
+    24 => fun interpret_cbor_value/1,
     32 => fun interpret_value/1,
     %% 33 => fun interpret_base64url_data/1,
     %% 34 => fun interpret_base64_data/1,
@@ -685,6 +685,20 @@ interpret_tagged_value(TaggedValue, _Opts) ->
 -spec interpret_value(tagged_value()) -> interpretation_result(term()).
 interpret_value({_Tag, Value}) ->
   {ok, Value}.
+
+%% @doc Interpret a CBOR-encoded value by decoding it.
+-spec interpret_cbor_value(tagged_value()) -> interpretation_result(term()).
+interpret_cbor_value({_Tag, Value}) when is_binary(Value) ->
+  case cbor:decode(Value) of
+    {ok, Value2, <<>>} ->
+      {ok, Value2};
+    {ok, _Value2, Rest} ->
+      {error, {invalid_trailing_data, Rest}};
+    {error, Reason} ->
+      {error, {invalid_cbor_data, Reason}}
+  end;
+interpret_cbor_value({_Tag, Value}) ->
+  {error, {invalid_cbor_data_value, Value}}.
 
 %% @doc Decode a CBOR simple value. Numeric simple values are decoded to
 %% Erlang integers. Others are decoded to Erlang atoms.

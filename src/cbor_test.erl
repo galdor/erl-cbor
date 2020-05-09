@@ -227,11 +227,16 @@ decode_test() ->
   ?assertEqual({4114, 1}, Decode("d9101201")),
   ?assertEqual({251658240, null}, Decode("da0f000000f6")),
   ?assertEqual({1311768465173141112, 0}, Decode("db123456781234567800")),
-  ?assertEqual(<<"http://example.com">>,
+  ?assertEqual(<<"http://example.com">>, % URI
                Decode("d82072687474703a2f2f6578616d706c652e636f6d")),
+  %% Tagged values - CBOR-encoded value
+  ?assertEqual(<<"abc">>, Decode("d8184443616263")),
+  %% Tagged values - regular expression
   ?assertEqual(<<"a+b?">>, Decode("d82364612b623f")),
-  ?assertEqual(<<"Subject: hello\r\n\r\nworld">>,
+  %% Tagged values - MIME message
+  ?assertEqual(<<"Subject: hello\r\n\r\nworld">>, % MIME message
                Decode("d824775375626a6563743a2068656c6c6f0d0a0d0a776f726c64")),
+  %% Tagged values - self-described CBOR value
   ?assertEqual(42, Decode("d9d9f7182a")),
   %% TODO bignum
   %% ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
