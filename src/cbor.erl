@@ -74,8 +74,8 @@
         #{tag() := tagged_value_interpreter()}.
 default_tagged_value_interpreters() ->
   #{
-    %% 0 => fun interpret_standard_datetime/1,
-    %% 1 => fun interpret_epoch_based_datetime/1,
+    0 => fun interpret_value/1,
+    1 => fun interpret_epoch_based_datetime/1,
     2 => fun interpret_positive_bignum/1,
     3 => fun interpret_negative_bignum/1,
     24 => fun interpret_cbor_value/1,
@@ -135,8 +135,8 @@ default_decoding_options() ->
 %%   <dt>`{timestamp, Value}'</dt>
 %%   <dd>
 %%     `Value' is encoded to a CBOR integer or floating point number tagged as
-%%     an epoch-based datetime. `Value' must be of type
-%%     `cbor_time:datetime/0'.  of type `erlang:timestamp()'.
+%%     an epoch-based datetime. `Value' must be either of type
+%%     `cbor_time:datetime/0' or of type `erlang:timestamp()'.
 %%   </dd>
 %%   <dt>`{Tag, Value}'</dt>
 %%   <dd>
@@ -350,11 +350,11 @@ decode(Data) ->
 %%     <dl>
 %%      <dt>0 (standard datetime)</dt>
 %%      <dd>
-%%        TODO standard datetime
+%%        A RFC3339-formatted binary string.
 %%      </dd>
 %%      <dt>1 (epoch-based datetime)</dt>
 %%      <dd>
-%%        TODO epoch-based datetime
+%%        A nanosecond epoch-based timestamp.
 %%      </dd>
 %%      <dt>2 (positive bignum)</dt>
 %%      <dt>3 (negative bignum)</dt>
@@ -685,6 +685,17 @@ interpret_tagged_value(TaggedValue, _Opts) ->
 -spec interpret_value(tagged_value()) -> interpretation_result(term()).
 interpret_value({_Tag, Value}) ->
   {ok, Value}.
+
+%% @doc Interpret a CBOR epoch-based datetime by converting it to an Erlang
+%% integer representing a number of nanoseconds since 1970-01-01T00:00:00Z.
+-spec interpret_epoch_based_datetime(tagged_value()) ->
+        interpretation_result(integer()).
+interpret_epoch_based_datetime({_Tag, Value}) when is_integer(Value) ->
+  {ok, Value * 1000000000};
+interpret_epoch_based_datetime({_Tag, Value}) when is_float(Value) ->
+  {ok, round(Value * 1.0e9)};
+interpret_epoch_based_datetime({_Tag, Value}) ->
+  {error, {invalid_epoch_based_datetime_value, Value}}.
 
 %% @doc Interpret a CBOR positive bignum by converting it to an Erlang
 %% integer.

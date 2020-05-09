@@ -229,6 +229,17 @@ decode_test() ->
   ?assertEqual({1311768465173141112, 0}, Decode("db123456781234567800")),
   ?assertEqual(<<"http://example.com">>, % URI
                Decode("d82072687474703a2f2f6578616d706c652e636f6d")),
+  %% Tagged values - standard datetimes
+  ?assertEqual(<<"2020-05-09T21:59:02+0200">>,
+               Decode("c07818323032302d30352d30395432313a35393a30322b30323030")),
+  ?assertEqual(<<"2020-05-09T21:59:02Z">>,
+               Decode("c074323032302d30352d30395432313a35393a30325a")),
+  ?assertEqual(<<"2020-05-09T21:59:02.42Z">>,
+               Decode("c077323032302d30352d30395432313a35393a30322e34325a")),
+  %% Tagged values - epoch-based datetimes
+  ?assertEqual(1589054456000000000, Decode("c11a5eb70bf8")),
+  ?assertEqual(-1577923200000000000, Decode("c13a5e0d327f")),
+  ?assertEqual(1589054456123456768, Decode("c1fb41d7adc2fe07e6b7")),
   %% Tagged values - bignums
   ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
   ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
