@@ -93,7 +93,7 @@ default_decoding_options() ->
   #{tagged_value_interpreters => default_tagged_value_interpreters()}.
 
 %% @doc Encode an Erlang value and return the binary representation of the
-%% resulting CBOR data item.
+%% resulting CBOR value.
 %%
 %% Integers, floats, boolean, binaries, lists and maps are encoded to the
 %% associated CBOR type.
@@ -181,7 +181,7 @@ encode(Value) ->
   error({unencodable_value, Value}).
 
 %% @doc Encode an Erlang value and return the representation of the resulting
-%% CBOR data item as an hex-encoded string.
+%% CBOR value as an hex-encoded string.
 %%
 %% @see encode/1
 -spec encode_hex(term()) -> unicode:chardata().
@@ -315,16 +315,16 @@ encode_tagged_value(Tag, Value) when Tag =< 16#ffffffffffffffff ->
 encode_tagged_value(Tag, _Value) ->
   error({unencodable_tag, Tag}).
 
-%% @doc Decode a CBOR data item from binary data and return both the Erlang
-%% value it represents and the rest of the binary data which were not decoded.
+%% @doc Decode a CBOR value from binary data and return both the Erlang value
+%% it represents and the rest of the binary data which were not decoded.
 %%
 %% @see decode/2
 -spec decode(iodata()) -> decoding_result(term()).
 decode(Data) ->
   decode(Data, default_decoding_options()).
 
-%% @doc Decode a CBOR data item from binary data and return both the Erlang
-%% value it represents and the rest of the binary data which were not decoded.
+%% @doc Decode a CBOR value from binary data and return both the Erlang value
+%% it represents and the rest of the binary data which were not decoded.
 %%
 %% CBOR values are converted to Erlang values as follows:
 %% <ul>
@@ -458,7 +458,7 @@ decode(<<Type, Data/binary>>, _Opts) when Type >= 16#f9, Type =< 16#fb ->
 decode(<<Type:8, _Data/binary>>, _Opts) ->
   {error, {invalid_type_tag, Type}}.
 
-%% @doc Decode a CBOR data item from an hex-encoded string and return both the
+%% @doc Decode a CBOR value from an hex-encoded string and return both the
 %% Erlang value it represents and the rest of the string which was not
 %% decoded.
 %%
@@ -467,7 +467,7 @@ decode(<<Type:8, _Data/binary>>, _Opts) ->
 decode_hex(Value) ->
   decode_hex(Value, default_decoding_options()).
 
-%% @doc Decode a CBOR data item from an hex-encoded string and return both the
+%% @doc Decode a CBOR value from an hex-encoded string and return both the
 %% Erlang value it represents and the rest of the string which was not
 %% decoded.
 %%
@@ -823,8 +823,8 @@ decode_float(16#fb, <<F:64/float, Rest/binary>>) ->
 decode_float(_Type, _Data) ->
   {error, truncated_float}.
 
-%% @doc Decode a fixed number of consecutive CBOR data items and return them
-%% as a list.
+%% @doc Decode a fixed number of consecutive CBOR values and return them as a
+%% list.
 -spec decode_values(iodata(), non_neg_integer(), list()) ->
         decoding_result(list()).
 decode_values(Data, 0, Acc) ->
@@ -839,8 +839,8 @@ decode_values(Data, N, Acc) ->
       {error, Reason}
   end.
 
-%% @doc Decode multiple consecutive CBOR data items until a break tag is
-%% found and return them as a list.
+%% @doc Decode multiple consecutive CBOR values until a break tag is found and
+%% return them as a list.
 -spec decode_indefinite_length_values(iodata(), list()) ->
         decoding_result(list()).
 decode_indefinite_length_values(<<>>, _Acc) ->
