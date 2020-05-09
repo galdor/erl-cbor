@@ -686,8 +686,8 @@ interpret_tagged_value(TaggedValue, _Opts) ->
 -spec interpret_utf8_string(tagged_value()) -> interpretation_result(unicode:chardata()).
 interpret_utf8_string({_Tag, Value}) when is_binary(Value) ->
   {ok, Value};
-interpret_utf8_string({_Tag, Value}) ->
-  {error, {invalid_utf8_string_value, Value}}.
+interpret_utf8_string(TaggedValue) ->
+  {error, {invalid_tagged_value, TaggedValue}}.
 
 %% @doc Interpret a CBOR epoch-based datetime by converting it to an Erlang
 %% integer representing a number of nanoseconds since 1970-01-01T00:00:00Z.
@@ -697,8 +697,8 @@ interpret_epoch_based_datetime({_Tag, Value}) when is_integer(Value) ->
   {ok, Value * 1000000000};
 interpret_epoch_based_datetime({_Tag, Value}) when is_float(Value) ->
   {ok, round(Value * 1.0e9)};
-interpret_epoch_based_datetime({_Tag, Value}) ->
-  {error, {invalid_epoch_based_datetime_value, Value}}.
+interpret_epoch_based_datetime(TaggedValue) ->
+  {error, {invalid_tagged_value, TaggedValue}}.
 
 %% @doc Interpret a CBOR positive bignum by converting it to an Erlang
 %% integer.
@@ -708,8 +708,8 @@ interpret_positive_bignum({_Tag, Value}) when is_binary(Value) ->
   Size = byte_size(Value) * 8,
   <<N:Size>> = Value,
   {ok, N};
-interpret_positive_bignum({_Tag, Value}) ->
-  {error, {invalid_bignum_value, Value}}.
+interpret_positive_bignum(TaggedValue) ->
+  {error, {invalid_tagged_value, TaggedValue}}.
 
 %% @doc Interpret a CBOR negative bignum by converting it to an Erlang
 %% integer.
@@ -719,8 +719,8 @@ interpret_negative_bignum({_Tag, Value}) when is_binary(Value) ->
   Size = byte_size(Value) * 8,
   <<N:Size>> = Value,
   {ok, -1 - N};
-interpret_negative_bignum({_Tag, Value}) ->
-  {error, {invalid_bignum_value, Value}}.
+interpret_negative_bignum(TaggedValue) ->
+  {error, {invalid_tagged_value, TaggedValue}}.
 
 %% @doc Interpret a base64url-encoded byte string by decoding it.
 -spec interpret_base64url_data(tagged_value()) ->
@@ -732,8 +732,8 @@ interpret_base64url_data({_Tag, Value}) when is_binary(Value) ->
     {error, Reason} ->
       {error, {invalid_base64url_data, Reason}}
   end;
-interpret_base64url_data({_Tag, Value}) ->
-  {error, {invalid_base64url_data_value, Value}}.
+interpret_base64url_data(TaggedValue) ->
+  {error, {invalid_tagged_value, TaggedValue}}.
 
 %% @doc Interpret a base64-encoded byte string by decoding it.
 -spec interpret_base64_data(tagged_value()) -> interpretation_result(binary()).
@@ -744,8 +744,8 @@ interpret_base64_data({_Tag, Value}) when is_binary(Value) ->
     {error, Reason} ->
       {error, {invalid_base64_data, Reason}}
   end;
-interpret_base64_data({_Tag, Value}) ->
-  {error, {invalid_base64_data_value, Value}}.
+interpret_base64_data(TaggedValue) ->
+  {error, {invalid_tagged_value, TaggedValue}}.
 
 %% @doc Interpret a CBOR-encoded value by decoding it.
 -spec interpret_cbor_value(tagged_value()) -> interpretation_result(term()).
@@ -758,8 +758,8 @@ interpret_cbor_value({_Tag, Value}) when is_binary(Value) ->
     {error, Reason} ->
       {error, {invalid_cbor_data, Reason}}
   end;
-interpret_cbor_value({_Tag, Value}) ->
-  {error, {invalid_cbor_data_value, Value}}.
+interpret_cbor_value(TaggedValue) ->
+  {error, {invalid_tagged_value, TaggedValue}}.
 
 %% @doc Interpret a self-described CBOR by returning it without any
 %% transformation.
