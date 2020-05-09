@@ -74,17 +74,17 @@
         #{tag() := tagged_value_interpreter()}.
 default_tagged_value_interpreters() ->
   #{
-    0 => fun interpret_value/1,
+    0 => fun interpret_utf8_string/1,
     1 => fun interpret_epoch_based_datetime/1,
     2 => fun interpret_positive_bignum/1,
     3 => fun interpret_negative_bignum/1,
     24 => fun interpret_cbor_value/1,
-    32 => fun interpret_value/1,
+    32 => fun interpret_utf8_string/1,
     33 => fun interpret_base64url_data/1,
     34 => fun interpret_base64_data/1,
-    35 => fun interpret_value/1,
-    36 => fun interpret_value/1,
-    55799 => fun interpret_value/1
+    35 => fun interpret_utf8_string/1,
+    36 => fun interpret_utf8_string/1,
+    55799 => fun interpret_self_described_cbor_value/1
 }.
 
 %% @doc Return the default list of decoding options.
@@ -681,10 +681,13 @@ interpret_tagged_value(TaggedValue = {Tag, _Value},
 interpret_tagged_value(TaggedValue, _Opts) ->
   {ok, TaggedValue}.
 
-%% @doc Interpret a value by returning it without any transformation.
--spec interpret_value(tagged_value()) -> interpretation_result(term()).
-interpret_value({_Tag, Value}) ->
-  {ok, Value}.
+%% @doc Interpret a CBOR UTF-8 string by returning it without any
+%% transformation.
+-spec interpret_utf8_string(tagged_value()) -> interpretation_result(unicode:chardata()).
+interpret_utf8_string({_Tag, Value}) when is_binary(Value) ->
+  {ok, Value};
+interpret_utf8_string({_Tag, Value}) ->
+  {error, {invalid_utf8_string_value, Value}}.
 
 %% @doc Interpret a CBOR epoch-based datetime by converting it to an Erlang
 %% integer representing a number of nanoseconds since 1970-01-01T00:00:00Z.
@@ -757,6 +760,13 @@ interpret_cbor_value({_Tag, Value}) when is_binary(Value) ->
   end;
 interpret_cbor_value({_Tag, Value}) ->
   {error, {invalid_cbor_data_value, Value}}.
+
+%% @doc Interpret a self-described CBOR by returning it without any
+%% transformation.
+-spec interpret_self_described_cbor_value(tagged_value()) ->
+        interpretation_result(term()).
+interpret_self_described_cbor_value({_Tag, Value}) ->
+  {ok, Value}.
 
 %% @doc Decode a CBOR simple value. Numeric simple values are decoded to
 %% Erlang integers. Others are decoded to Erlang atoms.
