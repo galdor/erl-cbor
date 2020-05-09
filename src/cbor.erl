@@ -81,7 +81,7 @@ default_tagged_value_interpreters() ->
     24 => fun interpret_cbor_value/1,
     32 => fun interpret_value/1,
     %% 33 => fun interpret_base64url_data/1,
-    %% 34 => fun interpret_base64_data/1,
+    34 => fun interpret_base64_data/1,
     35 => fun interpret_value/1,
     36 => fun interpret_value/1,
     55799 => fun interpret_value/1
@@ -707,6 +707,18 @@ interpret_negative_bignum({_Tag, Value}) when is_binary(Value) ->
   {ok, -1 - N};
 interpret_negative_bignum({_Tag, Value}) ->
   {error, {invalid_bignum_value, Value}}.
+
+%% @doc Interpret a base64-encoded byte string by decoding it.
+-spec interpret_base64_data(tagged_value()) -> interpretation_result(binary()).
+interpret_base64_data({_Tag, Value}) when is_binary(Value) ->
+  case cbor_base64:decode(Value) of
+    {ok, Bin} ->
+      {ok, Bin};
+    {error, Reason} ->
+      {error, {invalid_base64_data, Reason}}
+  end;
+interpret_base64_data({_Tag, Value}) ->
+  {error, {invalid_base64_data_value, Value}}.
 
 %% @doc Interpret a CBOR-encoded value by decoding it.
 -spec interpret_cbor_value(tagged_value()) -> interpretation_result(term()).

@@ -232,6 +232,10 @@ decode_test() ->
   %% Tagged values - bignums
   ?assertEqual(18446744073709551616, Decode("c249010000000000000000")),
   ?assertEqual(-18446744073709551617, Decode("c349010000000000000000")),
+  %% Tagged values - base64-encoded data
+  ?assertEqual(<<"">>, Decode("d82260")),
+  ?assertEqual(<<"hello">>, Decode("d8226761475673624738")), % "aGVsbG8K"
+  ?assertEqual(<<16#fb>>, Decode("d822622b2f")), % "+/"
   %% Tagged values - CBOR-encoded value
   ?assertEqual(<<"abc">>, Decode("d8184443616263")),
   %% Tagged values - regular expression
