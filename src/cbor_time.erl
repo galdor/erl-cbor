@@ -51,7 +51,7 @@ datetime_to_seconds({Nanoseconds, nanosecond}) ->
 datetime_to_seconds({Megaseconds, Seconds, Microseconds}) ->
   {Megaseconds * 1000000 + Seconds, Microseconds * 1000};
 datetime_to_seconds(Datetime = {Date, Time}) when
-    is_tuple(Date) andalso is_tuple(Time) ->
+    is_tuple(Date), is_tuple(Time) ->
   % We would like to use calendar:datetime_to_system_time/1 but it is not
   % exported.
   DaysFrom0ToEpoch = 719528,

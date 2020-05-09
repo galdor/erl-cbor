@@ -114,11 +114,11 @@ hex_string_to_binary([Digit1, Digit2 | Rest], Acc) ->
 
 %% @doc Convert an hexadecimal digit character to an integer.
 -spec hex_digit_to_integer(char()) -> 0..15.
-hex_digit_to_integer(C) when C >= $0 andalso C =< $9 ->
+hex_digit_to_integer(C) when C >= $0, C =< $9 ->
   C - $0;
-hex_digit_to_integer(C) when C >= $a andalso C =< $f ->
+hex_digit_to_integer(C) when C >= $a, C =< $f ->
   10 + C - $a;
-hex_digit_to_integer(C) when C >= $F andalso C =< $F ->
+hex_digit_to_integer(C) when C >= $F, C =< $F ->
   10 + C - $A.
 
 %% @doc Convert a list of successive keys and values into a map. For example

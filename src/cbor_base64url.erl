@@ -61,11 +61,11 @@ decode(Data, _Acc) ->
   {error, {invalid_data, Data}}.
 
 -spec digit_value($A..$Z | $a..$z | $0..$9 | $- | $_) -> 0..63.
-digit_value(Digit) when Digit >= $A andalso Digit =< $Z ->
+digit_value(Digit) when Digit >= $A, Digit =< $Z ->
   Digit - $A;
-digit_value(Digit) when Digit >= $a andalso Digit =< $z ->
+digit_value(Digit) when Digit >= $a, Digit =< $z ->
   26 + Digit - $a;
-digit_value(Digit) when Digit >= $0 andalso Digit =< $9 ->
+digit_value(Digit) when Digit >= $0, Digit =< $9 ->
   52 + Digit - $0;
 digit_value($-) ->
   62;
