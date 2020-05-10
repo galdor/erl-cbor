@@ -1,4 +1,0 @@
-%% encoding: UTF-8
-{application,cbor}.
-{modules,[cbor,cbor_base64,cbor_base64_test,cbor_base64url,
-          cbor_base64url_test,cbor_test,cbor_time,cbor_util]}.

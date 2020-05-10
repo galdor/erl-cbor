@@ -18,7 +18,7 @@
 
 encode_test() ->
   Encode = fun (Value) ->
-               cbor:encode_hex(Value)
+               binary_to_list(cbor:encode_hex(Value))
            end,
   %% Integers
   ?assertEqual("00", Encode(0)),
@@ -151,8 +151,9 @@ encode_test() ->
                Encode({timestamp, {1587, 856038, 100050}})).
 
 decode_test() ->
-  Decode = fun (String) ->
-               {ok, Value, _Rest} = cbor:decode_hex(String),
+  Decode = fun (Str) ->
+               Bin = list_to_binary(Str),
+               {ok, Value, _Rest} = cbor:decode_hex(Bin),
                Value
            end,
   %% Integers

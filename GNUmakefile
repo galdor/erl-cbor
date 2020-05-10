@@ -1,5 +1,5 @@
 
-all: dialyzer test doc
+all: dialyzer test
 
 dialyzer:
 	rebar3 dialyzer
@@ -14,10 +14,7 @@ cover:
 	rebar3 eunit --cover
 	rebar3 cover
 
-doc:
-	rebar3 edoc
-
 clean:
 	$(RM) -r _build
 
-.PHONY: all dialyzer build test cover doc clean
+.PHONY: all dialyzer build test cover clean

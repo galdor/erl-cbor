@@ -18,22 +18,11 @@
 
 -export([datetime_to_seconds/1]).
 
--type datetime() :: integer()
-                  | {integer(), erlang:time_unit()}
+-type datetime() :: integer() % epoch-based timestamp in seconds
+                  | {integer(), erlang:time_unit()} % epoch-based timestamp
                   | erlang:timestamp()
                   | calendar:datetime().
-%% A representation of a date and time which encompasses the most common
-%% Erlang representations:
-%% <ul>
-%%   <li>An epoch-based timestamp in seconds.</li>
-%%   <li>An epoch-based timestamp with an explicit time unit.</li>
-%%   <li>An Erlang timestamp represented as a tuple of megaseconds, seconds
-%%   and microseconds.</li>
-%%   <li>A calendar date represented as a tuple of date and time.</li>
-%% </ul>
 
-%% @doc Convert a datetime to an epoch based timestamp represented by a tuple
-%% of seconds and nanoseconds.
 -spec datetime_to_seconds(datetime()) -> {integer(), integer()}.
 datetime_to_seconds(Seconds) when is_integer(Seconds) ->
   {Seconds, 0};

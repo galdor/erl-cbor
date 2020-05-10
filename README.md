@@ -11,7 +11,8 @@ In the current state, the library supports:
 - A way to customize how tagged CBOR values are interpreted to Erlang values.
 
 # Documentation
-Code documentation is available [online](https://galdor.github.io/erl-cbor/doc/).
+A handbook is available [in the `doc`
+directory](https://github.com/galdor/erl-cbor/blob/master/doc/handbook.md).
 
 # Contact
 If you find a bug or have any question, feel free to open a GitHub issue or to

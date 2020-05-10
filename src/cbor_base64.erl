@@ -12,15 +12,10 @@
 %% OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 %% PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc The cbor_base64 module implements base64 decoding as defined by RFC
-%% 4648. Padded and non-padded encoded forms are both supported.
-%%
-%% @reference See <a href="https://tools.ietf.org/html/rfc4648">RFC 4648</a>.
 -module(cbor_base64).
 
 -export([decode/1]).
 
-%% @doc Decode base64-encoded data and return the decoded binary.
 -spec decode(iodata()) -> {ok, binary()} | {error, term()}.
 decode(Data) ->
   decode(Data, <<>>).

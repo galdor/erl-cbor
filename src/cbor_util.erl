@@ -19,8 +19,6 @@
          binary_to_hex_string/1, hex_string_to_binary/1,
          list_to_map/1]).
 
-%% @doc Return the binary representation of an unsigned integer of
-%% undetermined size.
 -spec unsigned_integer_bytes(non_neg_integer()) -> binary().
 unsigned_integer_bytes(I) ->
   unsigned_integer_bytes(I, []).
@@ -31,10 +29,6 @@ unsigned_integer_bytes(0, Acc) ->
 unsigned_integer_bytes(I, Acc) ->
   unsigned_integer_bytes(I bsr 8, [I band 16#ff | Acc]).
 
-%% @doc Return the initial type and length data for a sequence of CBOR
-%% elements.
-%%
-%% Sequences include arrays, maps, binary data and strings.
 -spec encode_sequence_header(MajorType :: 0..7, Len) -> binary() when
     Len :: non_neg_integer().
 encode_sequence_header(MajorType, Len) when Len =< 16#17 ->
@@ -50,9 +44,6 @@ encode_sequence_header(MajorType, Len) when Len =< 16#ffffffffffffffff ->
 encode_sequence_header(_MajorType, Len) ->
   error({unencodable_sequence_length, Len}).
 
-%% @doc Decode the length of a sequence of CBOR elements.
-%%
-%% Sequences include arrays, maps, binary data and strings.
 -spec decode_sequence_header(Tag, iodata()) -> {Len, iodata()} when
     Tag :: byte(),
     Len :: non_neg_integer().
@@ -92,27 +83,24 @@ decode_sequence_header(Tag, Data) ->
       error({invalid_sequence_header, Tag})
   end.
 
-%% @doc Convert a binary to an hex-encoded string.
--spec binary_to_hex_string(binary()) -> string().
+-spec binary_to_hex_string(binary()) -> binary().
 binary_to_hex_string(Bin) ->
   HexData = [io_lib:format("~2.16.0B", [Byte]) || <<Byte:8>> <= Bin],
-  string:lowercase(HexData).
+  string:lowercase(iolist_to_binary(HexData)).
 
-%% @doc Convert an hex-encoded string to a binary.
--spec hex_string_to_binary(string()) -> binary().
+-spec hex_string_to_binary(binary()) -> binary().
 hex_string_to_binary(Str) ->
   hex_string_to_binary(Str, <<>>).
 
--spec hex_string_to_binary(string(), binary()) -> binary().
-hex_string_to_binary([], Acc) ->
+-spec hex_string_to_binary(binary(), binary()) -> binary().
+hex_string_to_binary(<<>>, Acc) ->
   Acc;
-hex_string_to_binary([Digit1, Digit2 | Rest], Acc) ->
+hex_string_to_binary(<<Digit1:8, Digit2:8, Rest/binary>>, Acc) ->
   Q1 = hex_digit_to_integer(Digit1),
   Q2 = hex_digit_to_integer(Digit2),
   Byte = (Q1 bsl 4) bor Q2,
   hex_string_to_binary(Rest, <<Acc/binary, Byte>>).
 
-%% @doc Convert an hexadecimal digit character to an integer.
 -spec hex_digit_to_integer(char()) -> 0..15.
 hex_digit_to_integer(C) when C >= $0, C =< $9 ->
   C - $0;
@@ -121,8 +109,6 @@ hex_digit_to_integer(C) when C >= $a, C =< $f ->
 hex_digit_to_integer(C) when C >= $F, C =< $F ->
   10 + C - $A.
 
-%% @doc Convert a list of successive keys and values into a map. For example
-%% `list_to_map([a, 1, b, 2])' returns `#{a => 1, b => 2}'.
 -spec list_to_map(list()) -> map().
 list_to_map(Values) ->
   list_to_map(Values, #{}).
