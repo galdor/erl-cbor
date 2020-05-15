@@ -328,15 +328,14 @@ decode_utf8_string(Type, Data) ->
     {ok, Len, Data2} ->
       case Data2 of
         <<Bin:Len/binary, Rest/binary>> ->
-          Str = case unicode:characters_to_binary(Bin) of
-                  Bin2 when is_binary(Bin2) ->
-                    Bin2;
-                  {error, _, _} ->
-                    {error, {invalid_utf8_string, Bin}};
-                  {incomplete, _, _} ->
-                    {error, {incomplete_utf8_string, Bin}}
-                end,
-          {ok, Str, Rest};
+          case unicode:characters_to_binary(Bin) of
+            Bin2 when is_binary(Bin2) ->
+              {ok, Bin2, Rest};
+            {error, _, _} ->
+              {error, {invalid_utf8_string, Bin}};
+            {incomplete, _, _} ->
+              {error, {incomplete_utf8_string, Bin}}
+          end;
         _ ->
           {error, truncated_utf8_string}
       end;
@@ -350,15 +349,14 @@ decode_indefinite_length_utf8_string(Data) ->
   case binary:match(Data, <<255:8>>) of
     {Off, _Len} ->
       <<Bin:Off/binary, 255:8, Rest/binary>> = Data,
-      Str = case unicode:characters_to_binary(Bin) of
-              Bin2 when is_binary(Bin2) ->
-                Bin2;
-              {error, _, _} ->
-                {error, {invalid_utf8_string, Bin}};
-              {incomplete, _, _} ->
-                {error, {incomplete_utf8_string, Bin}}
-            end,
-      {ok, Str, Rest};
+      case unicode:characters_to_binary(Bin) of
+        Bin2 when is_binary(Bin2) ->
+          {ok, Bin2, Rest};
+        {error, _, _} ->
+          {error, {invalid_utf8_string, Bin}};
+        {incomplete, _, _} ->
+          {error, {incomplete_utf8_string, Bin}}
+      end;
     nomatch ->
       {error, truncated_utf8_string}
   end.
