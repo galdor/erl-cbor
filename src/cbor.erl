@@ -249,7 +249,9 @@ decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#e0, Type =< 16#f8 ->
 decode(<<Type, Data/binary>>, _Opts) when Type >= 16#f9, Type =< 16#fb ->
   decode_float(Type, Data);
 decode(<<Type:8, _Data/binary>>, _Opts) ->
-  {error, {invalid_type_tag, Type}}.
+  {error, {invalid_type_tag, Type}};
+decode(<<>>, _Opts) ->
+  {error, no_input}.
 
 -spec decode_hex(binary()) -> decoding_result(term()).
 decode_hex(Value) ->
