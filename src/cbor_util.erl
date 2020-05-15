@@ -44,43 +44,45 @@ encode_sequence_header(MajorType, Len) when Len =< 16#ffffffffffffffff ->
 encode_sequence_header(_MajorType, Len) ->
   error({unencodable_sequence_length, Len}).
 
--spec decode_sequence_header(Tag, iodata()) -> {Len, iodata()} when
+-spec decode_sequence_header(Tag, iodata()) ->
+        {ok, Len, iodata()} | {error, Reason} when
     Tag :: byte(),
-    Len :: non_neg_integer().
+    Len :: non_neg_integer(),
+    Reason :: truncated_sequence_header | invalid_sequence_header.
 decode_sequence_header(Tag, Data) ->
   case {Tag band 16#1f, Data} of
     {Len, Rest} when Len =< 16#17 ->
-      {Len, Rest};
+      {ok, Len, Rest};
     {16#18, Data2} ->
       case Data2 of
         <<Len:8, Rest/binary>> ->
-          {Len, Rest};
+          {ok, Len, Rest};
         _ ->
-          error({truncated_sequence_header, Tag})
+          {error, truncated_sequence_header}
       end;
     {16#19, Data2} ->
       case Data2 of
         <<Len:16, Rest/binary>> ->
-          {Len, Rest};
+          {ok, Len, Rest};
         _ ->
-          error({truncated_sequence_header, Tag})
+          {error, truncated_sequence_header}
       end;
     {16#1a, Data2} ->
       case Data2 of
         <<Len:32, Rest/binary>> ->
-          {Len, Rest};
+          {ok, Len, Rest};
         _ ->
-          error({truncated_sequence_header, Tag})
+          {error, truncated_sequence_header}
       end;
     {16#1b, Data2} ->
       case Data2 of
         <<Len:64, Rest/binary>> ->
-          {Len, Rest};
+          {ok, Len, Rest};
         _ ->
-          error({truncated_sequence_header, Tag})
+          {error, truncated_sequence_header}
       end;
     {_MinorType, _Rest} ->
-      error({invalid_sequence_header, Tag})
+      {error, invalid_sequence_header}
   end.
 
 -spec binary_to_hex_string(binary()) -> binary().

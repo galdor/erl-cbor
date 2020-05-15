@@ -296,12 +296,16 @@ decode_negative_integer(_Type, _Data) ->
 -spec decode_byte_string(Type, iodata()) -> decoding_result(binary()) when
     Type :: 16#40..16#5b.
 decode_byte_string(Type, Data) ->
-  {Len, Data2} = cbor_util:decode_sequence_header(Type, Data),
-  case Data2 of
-    <<Bin:Len/binary, Rest/binary>> ->
-      {ok, iolist_to_binary(Bin), Rest};
-    _ ->
-      {error, truncated_byte_string}
+  case cbor_util:decode_sequence_header(Type, Data) of
+    {ok, Len, Data2} ->
+      case Data2 of
+        <<Bin:Len/binary, Rest/binary>> ->
+          {ok, iolist_to_binary(Bin), Rest};
+        _ ->
+          {error, truncated_byte_string}
+      end;
+    {error, Reason} ->
+      {error, Reason}
   end.
 
 -spec decode_indefinite_length_byte_string(iodata()) ->
@@ -318,20 +322,24 @@ decode_indefinite_length_byte_string(Data) ->
 -spec decode_utf8_string(Type, iodata()) -> decoding_result(binary()) when
     Type :: 16#60..16#7b.
 decode_utf8_string(Type, Data) ->
-  {Len, Data2} = cbor_util:decode_sequence_header(Type, Data),
-  case Data2 of
-    <<Bin:Len/binary, Rest/binary>> ->
-      Str = case unicode:characters_to_binary(Bin) of
-              Bin2 when is_binary(Bin2) ->
-                Bin2;
-              {error, _, _} ->
-                {error, {invalid_utf8_string, Bin}};
-              {incomplete, _, _} ->
-                {error, {incomplete_utf8_string, Bin}}
-            end,
-      {ok, Str, Rest};
-    _ ->
-      {error, truncated_utf8_string}
+  case cbor_util:decode_sequence_header(Type, Data) of
+    {ok, Len, Data2} ->
+      case Data2 of
+        <<Bin:Len/binary, Rest/binary>> ->
+          Str = case unicode:characters_to_binary(Bin) of
+                  Bin2 when is_binary(Bin2) ->
+                    Bin2;
+                  {error, _, _} ->
+                    {error, {invalid_utf8_string, Bin}};
+                  {incomplete, _, _} ->
+                    {error, {incomplete_utf8_string, Bin}}
+                end,
+          {ok, Str, Rest};
+        _ ->
+          {error, truncated_utf8_string}
+      end;
+    {error, Reason} ->
+      {error, Reason}
   end.
 
 -spec decode_indefinite_length_utf8_string(iodata()) ->
@@ -356,12 +364,16 @@ decode_indefinite_length_utf8_string(Data) ->
 -spec decode_array(Type, iodata()) -> decoding_result(list()) when
     Type :: 16#80..16#9b.
 decode_array(Type, Data) ->
-  {Len, Data2} = cbor_util:decode_sequence_header(Type, Data),
-  case decode_values(Data2, Len, []) of
-    {ok, Values, Rest} ->
-      {ok, Values, Rest};
-    {error, truncated_sequence} ->
-      {error, truncated_array};
+  case cbor_util:decode_sequence_header(Type, Data) of
+    {ok, Len, Data2} ->
+      case decode_values(Data2, Len, []) of
+        {ok, Values, Rest} ->
+          {ok, Values, Rest};
+        {error, truncated_sequence} ->
+          {error, truncated_array};
+        {error, Reason} ->
+          {error, Reason}
+      end;
     {error, Reason} ->
       {error, Reason}
   end.
@@ -380,12 +392,16 @@ decode_indefinite_length_array(Data) ->
 -spec decode_map(Type, iodata()) -> decoding_result(map()) when
     Type :: 16#a0..16#bb.
 decode_map(Type, Data) ->
-  {Len, Data2} = cbor_util:decode_sequence_header(Type, Data),
-  case decode_values(Data2, Len*2, []) of
-    {ok, Values, Rest} ->
-      {ok, cbor_util:list_to_map(Values), Rest};
-    {error, truncated_sequence} ->
-      {error, truncated_map};
+  case cbor_util:decode_sequence_header(Type, Data) of
+    {ok, Len, Data2} ->
+      case decode_values(Data2, Len*2, []) of
+        {ok, Values, Rest} ->
+          {ok, cbor_util:list_to_map(Values), Rest};
+        {error, truncated_sequence} ->
+          {error, truncated_map};
+        {error, Reason} ->
+          {error, Reason}
+      end;
     {error, Reason} ->
       {error, Reason}
   end.
