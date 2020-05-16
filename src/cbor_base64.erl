@@ -18,7 +18,13 @@
 
 -spec decode(iodata()) -> {ok, binary()} | {error, term()}.
 decode(Data) ->
-  decode(Data, <<>>).
+  try decode(Data, <<>>) of
+    Result ->
+      Result
+  catch
+    error:Reason ->
+      {error, Reason}
+  end.
 
 decode(<<>>, Acc) ->
   {ok, Acc};
@@ -64,4 +70,6 @@ digit_value(Digit) when Digit >= $0, Digit =< $9 ->
 digit_value($+) ->
   62;
 digit_value($/) ->
-  63.
+  63;
+digit_value(C) ->
+  error({invalid_base64_digit, C}).
