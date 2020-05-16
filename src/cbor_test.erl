@@ -294,3 +294,104 @@ decode_test() ->
   ?assertEqual(nan, Decode("f97e00")),
   ?assertEqual(nan, Decode("fa7fc00000")),
   ?assertEqual(nan, Decode("fb7ff8000000000000")).
+
+decode_error_test() ->
+  Decode = fun (Str) ->
+               Bin = list_to_binary(Str),
+               {error, Reason} = cbor:decode_hex(Bin),
+               Reason
+           end,
+  ?assertEqual(no_input, Decode("")),
+  ?assertEqual({invalid_type_tag, 16#fe}, Decode("fe")),
+  ?assertEqual({invalid_type_tag, 16#ff}, Decode("ff")),
+  %% Integers
+  ?assertEqual(truncated_unsigned_integer, Decode("18")),
+  ?assertEqual(truncated_unsigned_integer, Decode("1900")),
+  ?assertEqual(truncated_unsigned_integer, Decode("1a000000")),
+  ?assertEqual(truncated_unsigned_integer, Decode("1b00000000000000")),
+  ?assertEqual(truncated_negative_integer, Decode("38")),
+  ?assertEqual(truncated_negative_integer, Decode("3900")),
+  ?assertEqual(truncated_negative_integer, Decode("3a000000")),
+  ?assertEqual(truncated_negative_integer, Decode("3b00000000000000")),
+  %% Byte strings
+  ?assertEqual(truncated_byte_string, Decode("41")),
+  ?assertEqual(truncated_sequence_header, Decode("58")),
+  ?assertEqual(truncated_byte_string, Decode("58030102")),
+  ?assertEqual(truncated_sequence_header, Decode("5900")),
+  %% Indefinite length byte strings
+  ?assertEqual(truncated_byte_string, Decode("5f")),
+  ?assertEqual(truncated_byte_string, Decode("5f010203")),
+  %% UTF-8 strings
+  ?assertEqual(truncated_utf8_string, Decode("61")),
+  ?assertEqual(truncated_sequence_header, Decode("78")),
+  ?assertEqual(truncated_utf8_string, Decode("78036162")),
+  ?assertEqual(truncated_sequence_header, Decode("7900")),
+  ?assertEqual({invalid_utf8_string, <<16#ed, 16#a0, 16#80>>},
+               Decode("63eda080")),
+  ?assertEqual({incomplete_utf8_string, <<16#c3>>}, Decode("61c3")),
+  %% Indefinite length UTF-8 strings
+  ?assertEqual(truncated_utf8_string, Decode("7f")),
+  ?assertEqual(truncated_utf8_string, Decode("7f616263")),
+  %% Arrays
+  ?assertEqual(truncated_array, Decode("83")),
+  ?assertEqual(truncated_array, Decode("830102")),
+  ?assertEqual(truncated_sequence_header, Decode("98")),
+  ?assertEqual(truncated_sequence_header, Decode("9900")),
+  %% Indefinite-length arrays
+  ?assertEqual(truncated_array, Decode("9f")),
+  ?assertEqual(truncated_array, Decode("9f0102")),
+  %% Maps
+  ?assertEqual(truncated_map, Decode("a1")),
+  ?assertEqual(truncated_map, Decode("a101")),
+  ?assertEqual(truncated_map, Decode("a20102")),
+  ?assertEqual(truncated_sequence_header, Decode("b8")),
+  ?assertEqual(truncated_sequence_header, Decode("b900")),
+  %% Indefinite-length maps
+  ?assertEqual(truncated_map, Decode("bf")),
+  ?assertEqual(truncated_map, Decode("bf01")),
+  ?assertEqual(odd_number_of_map_values, Decode("bf01ff")),
+  ?assertEqual(truncated_map, Decode("bf0102")),
+  %% Tagged values
+  ?assertEqual(no_input, Decode("c0")),
+  ?assertEqual(truncated_tagged_value, Decode("d8")),
+  ?assertEqual(no_input, Decode("d82a")),
+  ?assertEqual(truncated_tagged_value, Decode("d900")),
+  ?assertEqual(truncated_tagged_value, Decode("da000000")),
+  ?assertEqual(truncated_tagged_value, Decode("db00000000000000")),
+  %% Tagged values - standard datetimes
+  ?assertEqual({invalid_tagged_value, {0, 42}}, Decode("c0182a")),
+  %% Tagged values - epoch-based datetimes
+  ?assertEqual({invalid_tagged_value, {1, <<"">>}}, Decode("c160")),
+  %% Tagged values - bignums
+  ?assertEqual({invalid_tagged_value, {2, [1, 2, 3]}}, Decode("c283010203")),
+  ?assertEqual({invalid_tagged_value, {3, 0.0}}, Decode("c3f90000")),
+  %% Tagged values - base64url-encoded data
+  ?assertEqual({invalid_tagged_value, {33, 3}}, Decode("d82103")),
+  ?assertEqual({invalid_base64url_data, {invalid_base64url_digit, $?}},
+               Decode("d821676147567362473f")),
+  %% Tagged values - base64-encoded data
+  ?assertEqual({invalid_tagged_value, {34, 3}}, Decode("d82203")),
+  ?assertEqual({invalid_base64_data, {invalid_base64_digit, $?}},
+               Decode("d822676147567362473f")),
+  %% Tagged values - CBOR-encoded value
+  ?assertEqual({invalid_tagged_value, {24, [42]}}, Decode("d81881182a")),
+  ?assertEqual({invalid_cbor_data, no_input}, Decode("d81840")),
+  ?assertEqual({invalid_cbor_data, {invalid_type_tag, 255}},
+               Decode("d81841ff")),
+  ?assertEqual({invalid_trailing_data, <<"=">>}, Decode("d81845436162633d")),
+  ?assertEqual({invalid_cbor_data, truncated_byte_string},
+               Decode("d8184444616263")),
+  ?assertEqual(truncated_byte_string, Decode("d81844426162")),
+  %% Tagged values - regular expression
+  ?assertEqual({invalid_tagged_value, {35, 0}}, Decode("d82300")),
+  %% Tagged values - MIME message
+  ?assertEqual({invalid_tagged_value, {36, null}}, Decode("d824f6")),
+  %% Tagged values - self-described CBOR value
+  ?assertEqual(no_input, Decode("d9d9f7")),
+  ?assertEqual(truncated_unsigned_integer, Decode("d9d9f718")),
+  %% Simple values
+  ?assertEqual(truncated_simple_value, Decode("f8")),
+  %% Floating point numbers
+  ?assertEqual(truncated_float, Decode("f900")),
+  ?assertEqual(truncated_float, Decode("fa000000")),
+  ?assertEqual(truncated_float, Decode("fb00000000000000")).
