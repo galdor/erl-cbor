@@ -9,6 +9,7 @@ In the current state, the library supports:
 - Decoding of all CBOR value types, including indefinite length sequences.
 - Interpretation of various tagged data to suitable Erlang values.
 - A way to customize how tagged CBOR values are interpreted to Erlang values.
+- A configurable depth limit to protect against extremely deep data structures.
 
 # Documentation
 A handbook is available [in the `doc`

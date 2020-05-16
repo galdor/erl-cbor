@@ -395,3 +395,43 @@ decode_error_test() ->
   ?assertEqual(truncated_float, Decode("f900")),
   ?assertEqual(truncated_float, Decode("fa000000")),
   ?assertEqual(truncated_float, Decode("fb00000000000000")).
+
+decode_depth_test() ->
+  Decode = fun (Str, MaxDepth) ->
+               Bin = list_to_binary(Str),
+               Opts = maps:merge(cbor:default_decoding_options(),
+                                 #{max_depth => MaxDepth}),
+               cbor:decode_hex(Bin, Opts)
+           end,
+  %% Arrays
+  ?assertEqual({ok, [[[1]]], <<>>}, Decode("81818101", 5)),
+  ?assertEqual({ok, [[[1]]], <<>>}, Decode("81818101", 3)),
+  ?assertEqual({error, max_depth_reached}, Decode("81818101", 2)),
+  ?assertEqual({ok, [[[1]]], <<>>}, Decode("9f9f9f01ffffff", 3)),
+  ?assertEqual({error, max_depth_reached}, Decode("9f9f9f01ffffff", 2)),
+  ?assertEqual({ok, 1, <<>>}, Decode("01", 0)),
+  ?assertEqual({error, max_depth_reached}, Decode("8101", 0)),
+  %% Maps
+  ?assertEqual({ok, #{1 => 2}, <<>>}, Decode("a10102", 1)),
+  ?assertEqual({ok, #{1 => #{2 => 3}}, <<>>}, Decode("a101a10203", 3)),
+  ?assertEqual({ok, #{1 => #{2 => 3}}, <<>>}, Decode("a101a10203", 2)),
+  ?assertEqual({error, max_depth_reached}, Decode("a101a10203", 1)),
+  ?assertEqual({ok, #{1 => #{2 => 3}}, <<>>}, Decode("bf01bf0203ffff", 2)),
+  ?assertEqual({error, max_depth_reached}, Decode("bf01bf0203ffff", 1)),
+  ?assertEqual({ok, #{#{1 => 2} => 3}, <<>>}, Decode("a1a1010203", 3)),
+  ?assertEqual({ok, #{#{1 => 2} => 3}, <<>>}, Decode("a1a1010203", 2)),
+  ?assertEqual({error, max_depth_reached}, Decode("a1a1010203", 1)),
+  %% Mixed arrays and maps
+  ?assertEqual({ok, #{1 => [2, #{3 => 4}]}, <<>>}, Decode("a1018202a10304", 5)),
+  ?assertEqual({ok, #{1 => [2, #{3 => 4}]}, <<>>}, Decode("a1018202a10304", 3)),
+  ?assertEqual({error, max_depth_reached}, Decode("a1018202a10304", 2)),
+  %% Tagged values
+  ?assertEqual({ok, {42, [[[1]]]}, <<>>}, Decode("d82a81818101", 3)),
+  ?assertEqual({error, max_depth_reached}, Decode("d82a81818101", 2)),
+  %% Tagged values - CBOR-encoded value
+  ?assertEqual({ok, [[[1]]], <<>>}, Decode("d8184481818101", 3)),
+  ?assertEqual({error, {invalid_cbor_data, max_depth_reached}},
+               Decode("d8184481818101", 2)),
+  %% Tagged values - self-described CBOR value
+  ?assertEqual({ok, [[[1]]], <<>>}, Decode("d9d9f781818101", 3)),
+  ?assertEqual({error, max_depth_reached}, Decode("d9d9f781818101", 2)).

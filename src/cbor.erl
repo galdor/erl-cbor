@@ -34,10 +34,11 @@
 
 -type float_value() :: float() | positive_infinity | negative_infinity | nan.
 
--type decoding_options() :: #{tagged_value_interpreters =>
+-type decoding_options() :: #{max_depth => non_neg_integer(),
+                              tagged_value_interpreters =>
                                 #{tag() := tagged_value_interpreter()}}.
 
--type tagged_value_interpreter() :: fun((tagged_value()) ->
+-type tagged_value_interpreter() :: fun((tagged_value(), decoding_options()) ->
                                            interpretation_result(term())).
 
 -type decoding_result(ValueType) :: {ok, ValueType, iodata()} | {error, term()}.
@@ -48,22 +49,23 @@
         #{tag() := tagged_value_interpreter()}.
 default_tagged_value_interpreters() ->
   #{
-    0 => fun interpret_utf8_string/1,
-    1 => fun interpret_epoch_based_datetime/1,
-    2 => fun interpret_positive_bignum/1,
-    3 => fun interpret_negative_bignum/1,
-    24 => fun interpret_cbor_value/1,
-    32 => fun interpret_utf8_string/1,
-    33 => fun interpret_base64url_data/1,
-    34 => fun interpret_base64_data/1,
-    35 => fun interpret_utf8_string/1,
-    36 => fun interpret_utf8_string/1,
-    55799 => fun interpret_self_described_cbor_value/1
+    0 => fun interpret_utf8_string/2,
+    1 => fun interpret_epoch_based_datetime/2,
+    2 => fun interpret_positive_bignum/2,
+    3 => fun interpret_negative_bignum/2,
+    24 => fun interpret_cbor_value/2,
+    32 => fun interpret_utf8_string/2,
+    33 => fun interpret_base64url_data/2,
+    34 => fun interpret_base64_data/2,
+    35 => fun interpret_utf8_string/2,
+    36 => fun interpret_utf8_string/2,
+    55799 => fun interpret_self_described_cbor_value/2
 }.
 
 -spec default_decoding_options() -> decoding_options().
 default_decoding_options() ->
-  #{tagged_value_interpreters => default_tagged_value_interpreters()}.
+  #{max_depth => 1024,
+    tagged_value_interpreters => default_tagged_value_interpreters()}.
 
 -spec encode(term()) -> iodata().
 encode(Value) when is_integer(Value) ->
@@ -216,41 +218,48 @@ encode_tagged_value(Tag, _Value) ->
 decode(Data) ->
   decode(Data, default_decoding_options()).
 
--spec decode(iodata(), decoding_options()) ->
-        {ok, term(), iodata()} | {error, term()}.
-decode(<<Type:8, Data/binary>>, _Opts) when Type =< 16#17 ->
-  {ok, Type, Data};
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#18, Type =< 16#1b ->
-  decode_unsigned_integer(Type, Data);
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#20, Type =< 16#37 ->
-  {ok, -1 - (Type - 16#20), Data};
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#38, Type =< 16#3b ->
-  decode_negative_integer(Type, Data);
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#40, Type =< 16#5b ->
-  decode_byte_string(Type, Data);
-decode(<<16#5f:8, Data/binary>>, _Opts) ->
+-spec decode(iodata(), decoding_options()) -> decoding_result(term()).
+decode(Data, Opts) ->
+  decode(Data, Opts, 0).
+
+-spec decode(iodata(), decoding_options(), Depth) ->
+        decoding_result(term()) when
+    Depth :: non_neg_integer().
+decode(_Data, #{max_depth := MaxDepth}, Depth) when Depth > MaxDepth ->
+  {error, max_depth_reached};
+decode(<<T:8, Data/binary>>, _Opts, _Depth) when T =< 16#17 ->
+  {ok, T, Data};
+decode(<<T:8, Data/binary>>, _Opts, _Depth) when T >= 16#18, T =< 16#1b ->
+  decode_unsigned_integer(T, Data);
+decode(<<T:8, Data/binary>>, _Opts, _Depth) when T >= 16#20, T =< 16#37 ->
+  {ok, -1 - (T - 16#20), Data};
+decode(<<T:8, Data/binary>>, _Opts, _Depth) when T >= 16#38, T =< 16#3b ->
+  decode_negative_integer(T, Data);
+decode(<<T:8, Data/binary>>, _Opts, _Depth) when T >= 16#40, T =< 16#5b ->
+  decode_byte_string(T, Data);
+decode(<<16#5f:8, Data/binary>>, _Opts, _Depth) ->
   decode_indefinite_length_byte_string(Data);
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#60, Type =< 16#7b ->
-  decode_utf8_string(Type, Data);
-decode(<<16#7f:8, Data/binary>>, _Opts) ->
+decode(<<T:8, Data/binary>>, _Opts, _Depth) when T >= 16#60, T =< 16#7b ->
+  decode_utf8_string(T, Data);
+decode(<<16#7f:8, Data/binary>>, _Opts, _Depth) ->
   decode_indefinite_length_utf8_string(Data);
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#80, Type =< 16#9b ->
-  decode_array(Type, Data);
-decode(<<16#9f:8, Data/binary>>, _Opts) ->
-  decode_indefinite_length_array(Data);
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#a0, Type =< 16#bb ->
-  decode_map(Type, Data);
-decode(<<16#bf:8, Data/binary>>, _Opts) ->
-  decode_indefinite_length_map(Data);
-decode(<<Type:8, Data/binary>>, Opts) when Type >= 16#c0, Type =< 16#db ->
-  decode_tagged_value(Type, Data, Opts);
-decode(<<Type:8, Data/binary>>, _Opts) when Type >= 16#e0, Type =< 16#f8 ->
-  decode_simple_value(Type, Data);
-decode(<<Type, Data/binary>>, _Opts) when Type >= 16#f9, Type =< 16#fb ->
-  decode_float(Type, Data);
-decode(<<Type:8, _Data/binary>>, _Opts) ->
-  {error, {invalid_type_tag, Type}};
-decode(<<>>, _Opts) ->
+decode(<<T:8, Data/binary>>, Opts, Depth) when T >= 16#80, T =< 16#9b ->
+  decode_array(T, Data, Opts, Depth);
+decode(<<16#9f:8, Data/binary>>, Opts, Depth) ->
+  decode_indefinite_length_array(Data, Opts, Depth);
+decode(<<T:8, Data/binary>>, Opts, Depth) when T >= 16#a0, T =< 16#bb ->
+  decode_map(T, Data, Opts, Depth);
+decode(<<16#bf:8, Data/binary>>, Opts, Depth) ->
+  decode_indefinite_length_map(Data, Opts, Depth);
+decode(<<T:8, Data/binary>>, Opts, Depth) when T >= 16#c0, T =< 16#db ->
+  decode_tagged_value(T, Data, Opts, Depth);
+decode(<<T:8, Data/binary>>, _Opts, _Depth) when T >= 16#e0, T =< 16#f8 ->
+  decode_simple_value(T, Data);
+decode(<<T, Data/binary>>, _Opts, _Depth) when T >= 16#f9, T =< 16#fb ->
+  decode_float(T, Data);
+decode(<<T:8, _Data/binary>>, _Opts, _Depth) ->
+  {error, {invalid_type_tag, T}};
+decode(<<>>, _Opts, _Depth) ->
   {error, no_input}.
 
 -spec decode_hex(binary()) -> decoding_result(term()).
@@ -361,12 +370,14 @@ decode_indefinite_length_utf8_string(Data) ->
       {error, truncated_utf8_string}
   end.
 
--spec decode_array(Type, iodata()) -> decoding_result(list()) when
-    Type :: 16#80..16#9b.
-decode_array(Type, Data) ->
+-spec decode_array(Type, iodata(), Opts, Depth) -> decoding_result(list()) when
+    Type :: 16#80..16#9b,
+    Opts :: decoding_options(),
+    Depth :: non_neg_integer().
+decode_array(Type, Data, Opts, Depth) ->
   case cbor_util:decode_sequence_header(Type, Data) of
     {ok, Len, Data2} ->
-      case decode_values(Data2, Len, []) of
+      case decode_values(Data2, Len, Opts, Depth, []) of
         {ok, Values, Rest} ->
           {ok, Values, Rest};
         {error, truncated_sequence} ->
@@ -378,9 +389,12 @@ decode_array(Type, Data) ->
       {error, Reason}
   end.
 
--spec decode_indefinite_length_array(iodata()) -> decoding_result(list()).
-decode_indefinite_length_array(Data) ->
-  case decode_indefinite_length_values(Data, []) of
+-spec decode_indefinite_length_array(iodata(), Opts, Depth) ->
+        decoding_result(list()) when
+    Opts :: decoding_options(),
+    Depth :: non_neg_integer().
+decode_indefinite_length_array(Data, Opts, Depth) ->
+  case decode_indefinite_length_values(Data, Opts, Depth, []) of
     {ok, Values, Rest} ->
       {ok, Values, Rest};
     {error, truncated_sequence} ->
@@ -389,12 +403,14 @@ decode_indefinite_length_array(Data) ->
       {error, Reason}
   end.
 
--spec decode_map(Type, iodata()) -> decoding_result(map()) when
-    Type :: 16#a0..16#bb.
-decode_map(Type, Data) ->
+-spec decode_map(Type, iodata(), Opts, Depth) -> decoding_result(map()) when
+    Type :: 16#a0..16#bb,
+    Opts :: decoding_options(),
+    Depth :: non_neg_integer().
+decode_map(Type, Data, Opts, Depth) ->
   case cbor_util:decode_sequence_header(Type, Data) of
     {ok, Len, Data2} ->
-      case decode_values(Data2, Len*2, []) of
+      case decode_values(Data2, Len*2, Opts, Depth, []) of
         {ok, Values, Rest} ->
           {ok, cbor_util:list_to_map(Values), Rest};
         {error, truncated_sequence} ->
@@ -406,9 +422,12 @@ decode_map(Type, Data) ->
       {error, Reason}
   end.
 
--spec decode_indefinite_length_map(iodata()) -> decoding_result(map()).
-decode_indefinite_length_map(Data) ->
-  case decode_indefinite_length_values(Data, []) of
+-spec decode_indefinite_length_map(iodata(), Opts, Depth) ->
+        decoding_result(map()) when
+    Opts :: decoding_options(),
+    Depth :: non_neg_integer().
+decode_indefinite_length_map(Data, Opts, Depth) ->
+  case decode_indefinite_length_values(Data, Opts, Depth, []) of
     {ok, Values, _Rest} when (length(Values) rem 2) /= 0 ->
       {error, odd_number_of_map_values};
     {ok, Values, Rest} ->
@@ -419,28 +438,32 @@ decode_indefinite_length_map(Data) ->
       {error, Reason}
   end.
 
--spec decode_tagged_value(Type, iodata(), Opts) -> decoding_result(Result) when
+-spec decode_tagged_value(Type, iodata(), Opts, Depth) ->
+        decoding_result(Result) when
     Type :: 16#c0..16#db,
     Opts :: decoding_options(),
+    Depth :: non_neg_integer(),
     Result :: tagged_value() | term().
-decode_tagged_value(Type, Data, Opts) when Type >= 16#c0, Type =< 16#d7 ->
-  decode_tagged_data(Type - 16#c0, Data, Opts);
-decode_tagged_value(16#d8, <<Tag:8, Data/binary>>, Opts) ->
-  decode_tagged_data(Tag, Data, Opts);
-decode_tagged_value(16#d9, <<Tag:16, Data/binary>>, Opts) ->
-  decode_tagged_data(Tag, Data, Opts);
-decode_tagged_value(16#da, <<Tag:32, Data/binary>>, Opts) ->
-  decode_tagged_data(Tag, Data, Opts);
-decode_tagged_value(16#db, <<Tag:64, Data/binary>>, Opts) ->
-  decode_tagged_data(Tag, Data, Opts);
-decode_tagged_value(_Type, _Data, _Opts) ->
+decode_tagged_value(Type, Data, Opts, Depth) when
+    Type >= 16#c0, Type =< 16#d7 ->
+  decode_tagged_data(Type - 16#c0, Data, Opts, Depth);
+decode_tagged_value(16#d8, <<Tag:8, Data/binary>>, Opts, Depth) ->
+  decode_tagged_data(Tag, Data, Opts, Depth);
+decode_tagged_value(16#d9, <<Tag:16, Data/binary>>, Opts, Depth) ->
+  decode_tagged_data(Tag, Data, Opts, Depth);
+decode_tagged_value(16#da, <<Tag:32, Data/binary>>, Opts, Depth) ->
+  decode_tagged_data(Tag, Data, Opts, Depth);
+decode_tagged_value(16#db, <<Tag:64, Data/binary>>, Opts, Depth) ->
+  decode_tagged_data(Tag, Data, Opts, Depth);
+decode_tagged_value(_Type, _Data, _Opts, _Depth) ->
   {error, truncated_tagged_value}.
 
--spec decode_tagged_data(tag(), iodata(), decoding_options()) ->
+-spec decode_tagged_data(tag(), iodata(), decoding_options(), Depth) ->
         decoding_result(Result) when
+    Depth :: non_neg_integer(),
     Result :: tagged_value() | term().
-decode_tagged_data(Tag, Data, Opts) ->
-  case decode(Data) of
+decode_tagged_data(Tag, Data, Opts, Depth) ->
+  case decode(Data, Opts, Depth) of
     {ok, Value, Rest} ->
       case interpret_tagged_value({Tag, Value}, Opts) of
         {ok, Value2} ->
@@ -455,75 +478,78 @@ decode_tagged_data(Tag, Data, Opts) ->
 -spec interpret_tagged_value(tagged_value(), decoding_options()) ->
         interpretation_result(term()).
 interpret_tagged_value(TaggedValue = {Tag, _Value},
-                       #{tagged_value_interpreters := Interpreters}) ->
+                       Opts = #{tagged_value_interpreters := Interpreters}) ->
   case maps:find(Tag, Interpreters) of
     {ok, Interpreter} ->
-      Interpreter(TaggedValue);
+      Interpreter(TaggedValue, Opts);
     error ->
       {ok, TaggedValue}
   end;
 interpret_tagged_value(TaggedValue, _Opts) ->
   {ok, TaggedValue}.
 
--spec interpret_utf8_string(tagged_value()) -> interpretation_result(unicode:chardata()).
-interpret_utf8_string({_Tag, Value}) when is_binary(Value) ->
+-spec interpret_utf8_string(tagged_value(), decoding_options()) ->
+        interpretation_result(unicode:chardata()).
+interpret_utf8_string({_Tag, Value}, _Opts) when is_binary(Value) ->
   {ok, Value};
-interpret_utf8_string(TaggedValue) ->
+interpret_utf8_string(TaggedValue, _Opts) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_epoch_based_datetime(tagged_value()) ->
+-spec interpret_epoch_based_datetime(tagged_value(), decoding_options()) ->
         interpretation_result(integer()).
-interpret_epoch_based_datetime({_Tag, Value}) when is_integer(Value) ->
+interpret_epoch_based_datetime({_Tag, Value}, _Opts) when is_integer(Value) ->
   {ok, Value * 1000000000};
-interpret_epoch_based_datetime({_Tag, Value}) when is_float(Value) ->
+interpret_epoch_based_datetime({_Tag, Value}, _Opts) when is_float(Value) ->
   {ok, round(Value * 1.0e9)};
-interpret_epoch_based_datetime(TaggedValue) ->
+interpret_epoch_based_datetime(TaggedValue, _Opts) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_positive_bignum(tagged_value()) ->
+-spec interpret_positive_bignum(tagged_value(), decoding_options()) ->
         interpretation_result(integer()).
-interpret_positive_bignum({_Tag, Value}) when is_binary(Value) ->
+interpret_positive_bignum({_Tag, Value}, _Opts) when is_binary(Value) ->
   Size = byte_size(Value) * 8,
   <<N:Size>> = Value,
   {ok, N};
-interpret_positive_bignum(TaggedValue) ->
+interpret_positive_bignum(TaggedValue, _Opts) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_negative_bignum(tagged_value()) ->
+-spec interpret_negative_bignum(tagged_value(), decoding_options()) ->
         interpretation_result(integer()).
-interpret_negative_bignum({_Tag, Value}) when is_binary(Value) ->
+interpret_negative_bignum({_Tag, Value}, _Opts) when is_binary(Value) ->
   Size = byte_size(Value) * 8,
   <<N:Size>> = Value,
   {ok, -1 - N};
-interpret_negative_bignum(TaggedValue) ->
+interpret_negative_bignum(TaggedValue, _Opts) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_base64url_data(tagged_value()) ->
+-spec interpret_base64url_data(tagged_value(), decoding_options()) ->
         interpretation_result(binary()).
-interpret_base64url_data({_Tag, Value}) when is_binary(Value) ->
+interpret_base64url_data({_Tag, Value}, _Opts) when is_binary(Value) ->
   case cbor_base64url:decode(Value) of
     {ok, Bin} ->
       {ok, Bin};
     {error, Reason} ->
       {error, {invalid_base64url_data, Reason}}
   end;
-interpret_base64url_data(TaggedValue) ->
+interpret_base64url_data(TaggedValue, _Opts) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_base64_data(tagged_value()) -> interpretation_result(binary()).
-interpret_base64_data({_Tag, Value}) when is_binary(Value) ->
+-spec interpret_base64_data(tagged_value(), decoding_options()) ->
+        interpretation_result(binary()).
+interpret_base64_data({_Tag, Value}, _Opts) when is_binary(Value) ->
   case cbor_base64:decode(Value) of
     {ok, Bin} ->
       {ok, Bin};
     {error, Reason} ->
       {error, {invalid_base64_data, Reason}}
   end;
-interpret_base64_data(TaggedValue) ->
+interpret_base64_data(TaggedValue, _Opts) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_cbor_value(tagged_value()) -> interpretation_result(term()).
-interpret_cbor_value({_Tag, Value}) when is_binary(Value) ->
-  case cbor:decode(Value) of
+-spec interpret_cbor_value(tagged_value(), decoding_options()) ->
+        interpretation_result(term()).
+interpret_cbor_value({_Tag, Value}, Opts) when is_binary(Value) ->
+  case cbor:decode(Value, Opts) of
     {ok, Value2, <<>>} ->
       {ok, Value2};
     {ok, _Value2, Rest} ->
@@ -531,15 +557,16 @@ interpret_cbor_value({_Tag, Value}) when is_binary(Value) ->
     {error, Reason} ->
       {error, {invalid_cbor_data, Reason}}
   end;
-interpret_cbor_value(TaggedValue) ->
+interpret_cbor_value(TaggedValue, _Opts) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_self_described_cbor_value(tagged_value()) ->
+-spec interpret_self_described_cbor_value(tagged_value(), decoding_options()) ->
         interpretation_result(term()).
-interpret_self_described_cbor_value({_Tag, Value}) ->
+interpret_self_described_cbor_value({_Tag, Value}, _Opts) ->
   {ok, Value}.
 
--spec decode_simple_value(Type, iodata()) -> decoding_result(simple_value()) when
+-spec decode_simple_value(Type, iodata()) ->
+        decoding_result(simple_value()) when
     Type :: 16#e9..16#f8.
 decode_simple_value(Type, <<Data/binary>>) when Type >= 16#e0, Type =< 16#f3 ->
   {ok, {simple_value, Type - 16#e0}, Data};
@@ -599,30 +626,35 @@ decode_float(16#fb, <<F:64/float, Rest/binary>>) ->
 decode_float(_Type, _Data) ->
   {error, truncated_float}.
 
--spec decode_values(iodata(), non_neg_integer(), list()) ->
-        decoding_result(list()).
-decode_values(Data, 0, Acc) ->
+-spec decode_values(iodata(), N, Opts, Depth, list()) ->
+        decoding_result(list()) when
+    N :: non_neg_integer(),
+    Opts :: decoding_options(),
+    Depth :: non_neg_integer().
+decode_values(Data, 0, _Opts, _Depth, Acc) ->
   {ok, lists:reverse(Acc), Data};
-decode_values(<<>>, _N, _Acc) ->
+decode_values(<<>>, _N, _Opts, _Depth, _Acc) ->
   {error, truncated_sequence};
-decode_values(Data, N, Acc) ->
-  case decode(Data) of
+decode_values(Data, N, Opts, Depth, Acc) ->
+  case decode(Data, Opts, Depth + 1) of
     {ok, Value, Rest} ->
-      decode_values(Rest, N-1, [Value | Acc]);
+      decode_values(Rest, N-1, Opts, Depth, [Value | Acc]);
     {error, Reason} ->
       {error, Reason}
   end.
 
--spec decode_indefinite_length_values(iodata(), list()) ->
-        decoding_result(list()).
-decode_indefinite_length_values(<<>>, _Acc) ->
+-spec decode_indefinite_length_values(iodata(), Opts, Depth, list()) ->
+        decoding_result(list()) when
+    Opts :: decoding_options(),
+    Depth :: non_neg_integer().
+decode_indefinite_length_values(<<>>, _Opts, _Depth, _Acc) ->
   {error, truncated_sequence};
-decode_indefinite_length_values(<<16#ff:8, Data/binary>>, Acc) ->
+decode_indefinite_length_values(<<16#ff:8, Data/binary>>, _Opts, _Depth, Acc) ->
   {ok, lists:reverse(Acc), Data};
-decode_indefinite_length_values(Data, Acc) ->
-  case decode(Data) of
+decode_indefinite_length_values(Data, Opts, Depth, Acc) ->
+  case decode(Data, Opts, Depth + 1) of
     {ok, Value, Rest} ->
-      decode_indefinite_length_values(Rest, [Value | Acc]);
+      decode_indefinite_length_values(Rest, Opts, Depth, [Value | Acc]);
     {error, Reason} ->
       {error, Reason}
   end.
