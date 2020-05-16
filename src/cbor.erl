@@ -17,7 +17,7 @@
 -export([default_tagged_value_interpreters/0,
          default_decoding_options/0,
          encode/1, encode_hex/1,
-         decode/1, decode/2, decode_hex/1, decode_hex/2, foo/1]).
+         decode/1, decode/2, decode_hex/1, decode_hex/2]).
 
 -export_type([tag/0,
               tagged_value/0, simple_value/0, float_value/0,
@@ -626,17 +626,3 @@ decode_indefinite_length_values(Data, Acc) ->
     {error, Reason} ->
       {error, Reason}
   end.
-
-foo(Data) ->
-  InterpretURI = fun ({_Tag, Value}) ->
-                     case uri_string:parse(Value) of
-                       Map when is_map(Map) ->
-                         {ok, Map};
-                       {error, Reason, Datum} ->
-                         {error, {Reason, Datum}}
-                     end
-                 end,
-  Interpreters = maps:merge(default_tagged_value_interpreters(),
-                            #{32 => InterpretURI}),
-  Opts = #{tagged_value_interpreters => Interpreters},
-  decode(Data, Opts).
