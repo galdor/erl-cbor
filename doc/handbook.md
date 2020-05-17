@@ -82,7 +82,8 @@ Decoding options are represented by a map. The following options are
 supported:
 
 - `max_depth`: the maximum depth supported by the decoder; reaching this limit
-  will make decoding fail with a `max_deph_reached` error. The default limit
+  will make decoding fail with a `max_deph_reached` error. Arrays, maps and
+  tagged values increment the current depth during decoding. The default limit
   is 1024.
 - `tagged_value_interpreters`: a map containing a tagged value interpreter
   function for each supported tagged value. Unsupported tagged values will be

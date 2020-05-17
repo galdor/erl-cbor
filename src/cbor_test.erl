@@ -101,6 +101,11 @@ encode_test() ->
                Encode({24, <<16#64, 16#49, 16#45, 16#54, 16#46>>})),
   ?assertEqual("d82076687474703a2f2f7777772e6578616d706c652e636f6d",
                Encode({32, {string, <<"http://www.example.com">>}})),
+  %% Tagged values - multiple tags
+  ?assertEqual("d82ad82bd82c6568656c6c6f",
+              Encode({42, {43, {44, {string, "hello"}}}})),
+  ?assertEqual("d82ac249010000000000000000",
+               Encode({42, 18446744073709551616})),
   %% Dates
   ?assertEqual("c074313937302d30312d30315430303a30303a30305a",
                Encode({datetime, 0})),
@@ -230,6 +235,11 @@ decode_test() ->
   ?assertEqual({1311768465173141112, 0}, Decode("db123456781234567800")),
   ?assertEqual(<<"http://example.com">>, % URI
                Decode("d82072687474703a2f2f6578616d706c652e636f6d")),
+  %% Tagged values - multiple tags
+  ?assertEqual({42, {43, {44, <<"hello">>}}},
+               Decode("d82ad82bd82c6568656c6c6f")),
+  ?assertEqual({42, 18446744073709551616},
+               Decode("d82ac249010000000000000000")),
   %% Tagged values - standard datetimes
   ?assertEqual(<<"2020-05-09T21:59:02+0200">>,
                Decode("c07818323032302d30352d30395432313a35393a30322b30323030")),
@@ -426,12 +436,12 @@ decode_depth_test() ->
   ?assertEqual({ok, #{1 => [2, #{3 => 4}]}, <<>>}, Decode("a1018202a10304", 3)),
   ?assertEqual({error, max_depth_reached}, Decode("a1018202a10304", 2)),
   %% Tagged values
-  ?assertEqual({ok, {42, [[[1]]]}, <<>>}, Decode("d82a81818101", 3)),
-  ?assertEqual({error, max_depth_reached}, Decode("d82a81818101", 2)),
+  ?assertEqual({ok, {42, [[[1]]]}, <<>>}, Decode("d82a81818101", 4)),
+  ?assertEqual({error, max_depth_reached}, Decode("d82a81818101", 3)),
   %% Tagged values - CBOR-encoded value
-  ?assertEqual({ok, [[[1]]], <<>>}, Decode("d8184481818101", 3)),
+  ?assertEqual({ok, [[[1]]], <<>>}, Decode("d8184481818101", 4)),
   ?assertEqual({error, {invalid_cbor_data, max_depth_reached}},
-               Decode("d8184481818101", 2)),
+               Decode("d8184481818101", 3)),
   %% Tagged values - self-described CBOR value
-  ?assertEqual({ok, [[[1]]], <<>>}, Decode("d9d9f781818101", 3)),
-  ?assertEqual({error, max_depth_reached}, Decode("d9d9f781818101", 2)).
+  ?assertEqual({ok, [[[1]]], <<>>}, Decode("d9d9f781818101", 4)),
+  ?assertEqual({error, max_depth_reached}, Decode("d9d9f781818101", 3)).

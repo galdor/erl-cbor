@@ -38,8 +38,9 @@
                               tagged_value_interpreters =>
                                 #{tag() := tagged_value_interpreter()}}.
 
--type tagged_value_interpreter() :: fun((tagged_value(), decoding_options()) ->
-                                           interpretation_result(term())).
+-type tagged_value_interpreter() ::
+        fun((tagged_value(), decoding_options(), Depth :: non_neg_integer()) ->
+               interpretation_result(term())).
 
 -type decoding_result(ValueType) :: {ok, ValueType, iodata()} | {error, term()}.
 
@@ -49,17 +50,17 @@
         #{tag() := tagged_value_interpreter()}.
 default_tagged_value_interpreters() ->
   #{
-    0 => fun interpret_utf8_string/2,
-    1 => fun interpret_epoch_based_datetime/2,
-    2 => fun interpret_positive_bignum/2,
-    3 => fun interpret_negative_bignum/2,
-    24 => fun interpret_cbor_value/2,
-    32 => fun interpret_utf8_string/2,
-    33 => fun interpret_base64url_data/2,
-    34 => fun interpret_base64_data/2,
-    35 => fun interpret_utf8_string/2,
-    36 => fun interpret_utf8_string/2,
-    55799 => fun interpret_self_described_cbor_value/2
+    0 => fun interpret_utf8_string/3,
+    1 => fun interpret_epoch_based_datetime/3,
+    2 => fun interpret_positive_bignum/3,
+    3 => fun interpret_negative_bignum/3,
+    24 => fun interpret_cbor_value/3,
+    32 => fun interpret_utf8_string/3,
+    33 => fun interpret_base64url_data/3,
+    34 => fun interpret_base64_data/3,
+    35 => fun interpret_utf8_string/3,
+    36 => fun interpret_utf8_string/3,
+    55799 => fun interpret_self_described_cbor_value/3
 }.
 
 -spec default_decoding_options() -> decoding_options().
@@ -463,9 +464,9 @@ decode_tagged_value(_Type, _Data, _Opts, _Depth) ->
     Depth :: non_neg_integer(),
     Result :: tagged_value() | term().
 decode_tagged_data(Tag, Data, Opts, Depth) ->
-  case decode(Data, Opts, Depth) of
+  case decode(Data, Opts, Depth + 1) of
     {ok, Value, Rest} ->
-      case interpret_tagged_value({Tag, Value}, Opts) of
+      case interpret_tagged_value({Tag, Value}, Opts, Depth + 1) of
         {ok, Value2} ->
           {ok, Value2, Rest};
         {error, Reason} ->
@@ -475,81 +476,93 @@ decode_tagged_data(Tag, Data, Opts, Depth) ->
       {error, Reason}
   end.
 
--spec interpret_tagged_value(tagged_value(), decoding_options()) ->
-        interpretation_result(term()).
+-spec interpret_tagged_value(tagged_value(), decoding_options(), Depth) ->
+        interpretation_result(term()) when
+    Depth :: non_neg_integer().
 interpret_tagged_value(TaggedValue = {Tag, _Value},
-                       Opts = #{tagged_value_interpreters := Interpreters}) ->
+                       Opts = #{tagged_value_interpreters := Interpreters},
+                       Depth) ->
   case maps:find(Tag, Interpreters) of
     {ok, Interpreter} ->
-      Interpreter(TaggedValue, Opts);
+      Interpreter(TaggedValue, Opts, Depth);
     error ->
       {ok, TaggedValue}
   end;
-interpret_tagged_value(TaggedValue, _Opts) ->
+interpret_tagged_value(TaggedValue, _Opts, _Depth) ->
   {ok, TaggedValue}.
 
--spec interpret_utf8_string(tagged_value(), decoding_options()) ->
-        interpretation_result(unicode:chardata()).
-interpret_utf8_string({_Tag, Value}, _Opts) when is_binary(Value) ->
+-spec interpret_utf8_string(tagged_value(), decoding_options(), Depth) ->
+        interpretation_result(unicode:chardata()) when
+    Depth :: non_neg_integer().
+interpret_utf8_string({_Tag, Value}, _Opts, _Depth) when is_binary(Value) ->
   {ok, Value};
-interpret_utf8_string(TaggedValue, _Opts) ->
+interpret_utf8_string(TaggedValue, _Opts, _Depth) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_epoch_based_datetime(tagged_value(), decoding_options()) ->
-        interpretation_result(integer()).
-interpret_epoch_based_datetime({_Tag, Value}, _Opts) when is_integer(Value) ->
+-spec interpret_epoch_based_datetime(tagged_value(), decoding_options(),
+                                     Depth) ->
+        interpretation_result(integer()) when
+    Depth :: non_neg_integer().
+interpret_epoch_based_datetime({_Tag, Value}, _Opts, _Depth) when
+    is_integer(Value) ->
   {ok, Value * 1000000000};
-interpret_epoch_based_datetime({_Tag, Value}, _Opts) when is_float(Value) ->
+interpret_epoch_based_datetime({_Tag, Value}, _Opts, _Depth) when
+    is_float(Value) ->
   {ok, round(Value * 1.0e9)};
-interpret_epoch_based_datetime(TaggedValue, _Opts) ->
+interpret_epoch_based_datetime(TaggedValue, _Opts, _Depth) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_positive_bignum(tagged_value(), decoding_options()) ->
-        interpretation_result(integer()).
-interpret_positive_bignum({_Tag, Value}, _Opts) when is_binary(Value) ->
+-spec interpret_positive_bignum(tagged_value(), decoding_options(), Depth) ->
+        interpretation_result(integer()) when
+    Depth :: non_neg_integer().
+interpret_positive_bignum({_Tag, Value}, _Opts, _Depth) when is_binary(Value) ->
   Size = byte_size(Value) * 8,
   <<N:Size>> = Value,
   {ok, N};
-interpret_positive_bignum(TaggedValue, _Opts) ->
+interpret_positive_bignum(TaggedValue, _Opts, _Depth) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_negative_bignum(tagged_value(), decoding_options()) ->
-        interpretation_result(integer()).
-interpret_negative_bignum({_Tag, Value}, _Opts) when is_binary(Value) ->
+-spec interpret_negative_bignum(tagged_value(), decoding_options(), Depth) ->
+        interpretation_result(integer()) when
+    Depth :: non_neg_integer().
+interpret_negative_bignum({_Tag, Value}, _Opts, _Depth) when is_binary(Value) ->
   Size = byte_size(Value) * 8,
   <<N:Size>> = Value,
   {ok, -1 - N};
-interpret_negative_bignum(TaggedValue, _Opts) ->
+interpret_negative_bignum(TaggedValue, _Opts, _Depth) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_base64url_data(tagged_value(), decoding_options()) ->
-        interpretation_result(binary()).
-interpret_base64url_data({_Tag, Value}, _Opts) when is_binary(Value) ->
+-spec interpret_base64url_data(tagged_value(), decoding_options(), Depth) ->
+        interpretation_result(binary()) when
+    Depth :: non_neg_integer().
+interpret_base64url_data({_Tag, Value}, _Opts, _Depth) when is_binary(Value) ->
   case cbor_base64url:decode(Value) of
     {ok, Bin} ->
       {ok, Bin};
     {error, Reason} ->
       {error, {invalid_base64url_data, Reason}}
   end;
-interpret_base64url_data(TaggedValue, _Opts) ->
+interpret_base64url_data(TaggedValue, _Opts, _Depth) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_base64_data(tagged_value(), decoding_options()) ->
-        interpretation_result(binary()).
-interpret_base64_data({_Tag, Value}, _Opts) when is_binary(Value) ->
+-spec interpret_base64_data(tagged_value(), decoding_options(), Depth) ->
+        interpretation_result(binary()) when
+    Depth :: non_neg_integer().
+interpret_base64_data({_Tag, Value}, _Opts, _Depth) when is_binary(Value) ->
   case cbor_base64:decode(Value) of
     {ok, Bin} ->
       {ok, Bin};
     {error, Reason} ->
       {error, {invalid_base64_data, Reason}}
   end;
-interpret_base64_data(TaggedValue, _Opts) ->
+interpret_base64_data(TaggedValue, _Opts, _Depth) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_cbor_value(tagged_value(), decoding_options()) ->
-        interpretation_result(term()).
-interpret_cbor_value({_Tag, Value}, Opts) when is_binary(Value) ->
-  case cbor:decode(Value, Opts) of
+-spec interpret_cbor_value(tagged_value(), decoding_options(), Depth) ->
+        interpretation_result(term()) when
+    Depth :: non_neg_integer().
+interpret_cbor_value({_Tag, Value}, Opts, Depth) when is_binary(Value) ->
+  case decode(Value, Opts, Depth) of
     {ok, Value2, <<>>} ->
       {ok, Value2};
     {ok, _Value2, Rest} ->
@@ -557,12 +570,14 @@ interpret_cbor_value({_Tag, Value}, Opts) when is_binary(Value) ->
     {error, Reason} ->
       {error, {invalid_cbor_data, Reason}}
   end;
-interpret_cbor_value(TaggedValue, _Opts) ->
+interpret_cbor_value(TaggedValue, _Opts, _Depth) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
--spec interpret_self_described_cbor_value(tagged_value(), decoding_options()) ->
-        interpretation_result(term()).
-interpret_self_described_cbor_value({_Tag, Value}, _Opts) ->
+-spec interpret_self_described_cbor_value(tagged_value(), decoding_options(),
+                                          Depth) ->
+        interpretation_result(term()) when
+    Depth :: non_neg_integer().
+interpret_self_described_cbor_value({_Tag, Value}, _Opts, _Depth) ->
   {ok, Value}.
 
 -spec decode_simple_value(Type, iodata()) ->
