@@ -20,7 +20,7 @@
          decode/1, decode/2, decode_hex/1, decode_hex/2]).
 
 -export_type([tag/0,
-              tagged_value/0, simple_value/0, float_value/0,
+              tagged_value/0, simple_value/0,
               tagged_value_interpreter/0,
               decoding_options/0,
               interpretation_result/1]).
@@ -31,8 +31,6 @@
 
 -type simple_value() :: {simple_value, 0..255}
                       | false | true | null | undefined.
-
--type float_value() :: float() | positive_infinity | negative_infinity | nan.
 
 -type decoding_options() :: #{max_depth => non_neg_integer(),
                               tagged_value_interpreters =>
@@ -598,45 +596,17 @@ decode_simple_value(16#f8, <<Value:8, Data/binary>>) ->
 decode_simple_value(16#f8, <<>>) ->
   {error, truncated_simple_value}.
 
--spec decode_float(Type, iodata()) -> decoding_result(float_value()) when
+-spec decode_float(Type, iodata()) -> decoding_result(cbor_float:value()) when
     Type :: 16#f9..16#fb.
 %% Half-precision
-decode_float(16#f9, <<_S:1, 0:5, 0:10, Rest/binary>>) ->
-  {ok, 0.0, Rest};
-decode_float(16#f9, <<S:1, 0:5, F:10, Rest/binary>>) ->
-  Value = math:pow(-1.0, S) * math:pow(2.0, -14) * (F/1024.0),
-  {ok, Value, Rest};
-decode_float(16#f9, <<0:1, 31:5, 0:10, Rest/binary>>) ->
-  {ok, positive_infinity, Rest};
-decode_float(16#f9, <<1:1, 31:5, 0:10, Rest/binary>>) ->
-  {ok, negative_infinity, Rest};
-decode_float(16#f9, <<_S:1, 31:5, _F:10, Rest/binary>>) ->
-  {ok, nan, Rest};
-decode_float(16#f9, <<S:1, E:5, F:10, Rest/binary>>) ->
-  Value = math:pow(-1.0, S) * math:pow(2.0, E-15) * (1 + F/1024.0),
-  {ok, Value, Rest};
+decode_float(16#f9, <<Data:2/binary, Rest/binary>>) ->
+  {ok, cbor_float:decode_f16(Data), Rest};
 %% Single precision
-decode_float(16#fa, <<_S:1, 0:8, 0:23, Rest/binary>>) ->
-  {ok, 0.0, Rest};
-decode_float(16#fa, <<0:1, 255:8, 0:23, Rest/binary>>) ->
-  {ok, positive_infinity, Rest};
-decode_float(16#fa, <<1:1, 255:8, 0:23, Rest/binary>>) ->
-  {ok, negative_infinity, Rest};
-decode_float(16#fa, <<_S:1, 255:8, _F:23, Rest/binary>>) ->
-  {ok, nan, Rest};
-decode_float(16#fa, <<F:32/float, Rest/binary>>) ->
-  {ok, F, Rest};
+decode_float(16#fa, <<Data:4/binary, Rest/binary>>) ->
+  {ok, cbor_float:decode_f32(Data), Rest};
 %% Double precision
-decode_float(16#fb, <<_S:1, 0:11, 0:52, Rest/binary>>) ->
-  {ok, 0.0, Rest};
-decode_float(16#fb, <<0:1, 2047:11, 0:52, Rest/binary>>) ->
-  {ok, positive_infinity, Rest};
-decode_float(16#fb, <<1:1, 2047:11, 0:52, Rest/binary>>) ->
-  {ok, negative_infinity, Rest};
-decode_float(16#fb, <<_S:1, 2047:11, _F:52, Rest/binary>>) ->
-  {ok, nan, Rest};
-decode_float(16#fb, <<F:64/float, Rest/binary>>) ->
-  {ok, F, Rest};
+decode_float(16#fb, <<Data:8/binary, Rest/binary>>) ->
+  {ok, cbor_float:decode_f64(Data), Rest};
 %% Truncated
 decode_float(_Type, _Data) ->
   {error, truncated_float}.
