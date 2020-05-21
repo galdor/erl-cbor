@@ -43,8 +43,7 @@ default_options() ->
 -spec default_tagged_value_interpreters() ->
         #{cbor:tag() := tagged_value_interpreter()}.
 default_tagged_value_interpreters() ->
-  #{
-    0 => fun interpret_utf8_string/2,
+  #{0 => fun interpret_utf8_string/2,
     1 => fun interpret_epoch_based_datetime/2,
     2 => fun interpret_positive_bignum/2,
     3 => fun interpret_negative_bignum/2,
@@ -54,8 +53,7 @@ default_tagged_value_interpreters() ->
     34 => fun interpret_base64_data/2,
     35 => fun interpret_utf8_string/2,
     36 => fun interpret_utf8_string/2,
-    55799 => fun interpret_self_described_cbor_value/2
-}.
+    55799 => fun interpret_self_described_cbor_value/2}.
 
 -spec decoder(options()) -> decoder().
 decoder(Opts) ->
