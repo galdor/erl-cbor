@@ -409,7 +409,7 @@ decode_error_test() ->
 decode_depth_test() ->
   Decode = fun (Str, MaxDepth) ->
                Bin = list_to_binary(Str),
-               Opts = maps:merge(cbor:default_decoding_options(),
+               Opts = maps:merge(cbor_decoding:default_options(),
                                  #{max_depth => MaxDepth}),
                cbor:decode_hex(Bin, Opts)
            end,

@@ -89,7 +89,7 @@ supported:
   function for each supported tagged value. Unsupported tagged values will be
   decoded to a tuple of the form `{Tag, Value}`.
 
-The `cbor:default_decoding_options/0` function returns the map of options used
+The `cbor_decoding:default_options/0` function returns the map of options used
 by default.
 
 ## Type mapping
@@ -148,26 +148,27 @@ This mapping is configured with a map which associates each tag to its
 interpreter. Interpreters are functions which take the `{Tag, Value}` tagged
 value as argument and return either `{ok, Value2}` or `{error, Reason}`.
 
-The `cbor:default_tagged_value_interpreters/0` function returns the default map
-of tagged value interpreters.
+The `cbor_decoding:default_tagged_value_interpreters/0` function returns the
+default map of tagged value interpreters.
 
 The following example extends the default interpreter map to decode CBOR
 URIs (tag 0) to `uri_string:uri_map()` maps:
 
 ```erlang
-interpret_uri({_Tag, Value}) when is_binary(Value) ->
+interpret_uri(_Decoder, {_Tag, Value}) when is_binary(Value) ->
   case uri_string:parse(Value) of
     Map when is_map(Map) ->
       {ok, Map};
     {error, Reason, Datum} ->
       {error, {Reason, Datum}}
   end;
-interpret_uri(TaggedValue) ->
+interpret_uri(_Decoder, TaggedValue) ->
   {error, {invalid_tagged_value, TaggedValue}}.
 
 custom_decode_hex(Data) ->
-  Interpreters = maps:merge(cbor:default_tagged_value_interpreters(),
-                            #{32 => fun interpret_uri/1}),
-  Opts = #{tagged_value_interpreters => Interpreters},
+  Interpreters = maps:merge(cbor_decoding:default_tagged_value_interpreters(),
+                            #{32 => fun interpret_uri/2}),
+  Opts = maps:merge(cbor_decoding:default_options(),
+                    #{tagged_value_interpreters => Interpreters}),
   cbor:decode(Data, Opts).
 ```
