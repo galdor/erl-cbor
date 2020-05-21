@@ -445,3 +445,10 @@ decode_depth_test() ->
   %% Tagged values - self-described CBOR value
   ?assertEqual({ok, [[[1]]], <<>>}, Decode("d9d9f781818101", 4)),
   ?assertEqual({error, max_depth_reached}, Decode("d9d9f781818101", 3)).
+
+decode_without_interpreters_test() ->
+  ?assertEqual({ok, 18446744073709551616, <<>>},
+               cbor:decode_hex(<<"c249010000000000000000">>,
+                               cbor_decoding:default_options())),
+  ?assertEqual({ok, {2, <<1, 0, 0, 0, 0, 0, 0, 0, 0>>}, <<>>},
+               cbor:decode_hex(<<"c249010000000000000000">>, #{})).
