@@ -43,6 +43,8 @@ encode_test() ->
   ?assertEqual("fb0000000000000000", Encode(0.0)), % canonical: f90000
   ?assertEqual("fb0000000000000000", Encode(-0.0)), % canonical: f98000
   ?assertEqual("fb3ff0000000000000", Encode(1.0)), % canonical: f93c00
+  ?assertEqual("f90000000000000000", Encode(positive_zero)),
+  ?assertEqual("f98000000000000000", Encode(negative_zero)),
   ?assertEqual("fb3ff199999999999a", Encode(1.1)),
   ?assertEqual("fb3ff8000000000000", Encode(1.5)), % canonical: f93e00
   ?assertEqual("fb40effc0000000000", Encode(65504.0)), % canonical: f97bff

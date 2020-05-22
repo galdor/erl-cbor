@@ -21,6 +21,10 @@ encode(Value) when is_integer(Value) ->
   encode_integer(Value);
 encode(Value) when is_float(Value) ->
   encode_float(Value);
+encode(positive_zero) ->
+  <<16#f9, 0, 0, 0, 0, 0, 0, 0, 0>>;
+encode(negative_zero) ->
+  <<16#f9, 128, 0, 0, 0, 0, 0, 0, 0>>;
 encode(positive_infinity) ->
   <<16#f9, 16#7c, 16#00>>;
 encode(negative_infinity) ->

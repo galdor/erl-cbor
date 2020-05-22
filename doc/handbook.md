@@ -23,7 +23,8 @@ Erlang data are encoded using the following type mapping:
   negative tagged big numbers.
 - Floats are encoded as CBOR floating point numbers. Note that because Erlang
   does not handle the negative zero IEEE.754 value internally (`-0` is parsed
-  to `0`), the encoder will never produce it.
+  to `0`), the encoder will never produce a negative zero CBOR floating point
+  value for an Erlang float; the `negative_zero` atom can be used instead.
 - Booleans are encoded using the `true` and `false` CBOR simple values.
 - Binaries are encoded as CBOR byte strings.
 - Lists are encoded as CBOR arrays.
@@ -31,6 +32,8 @@ Erlang data are encoded using the following type mapping:
 - Atoms are used for specific CBOR values:
   - `positive_infinity`: the IEEE.754 +Inf floating point value.
   - `negative_infinity`: the IEEE.754 -Inf floating point value.
+  - `positive_zero`: the IEEE.754 -0.0 floating point value.
+  - `negative_zero`: the IEEE.754 +0.0 floating point value.
   - `nan`: the IEEE.754 NaN floating point value.
   - `null`: the `null` CBOR simple value.
   - `undefined`: the `undefined` CBOR simple value.
