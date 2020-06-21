@@ -108,7 +108,7 @@ hex_digit_to_integer(C) when C >= $0, C =< $9 ->
   C - $0;
 hex_digit_to_integer(C) when C >= $a, C =< $f ->
   10 + C - $a;
-hex_digit_to_integer(C) when C >= $F, C =< $F ->
+hex_digit_to_integer(C) when C >= $A, C =< $F ->
   10 + C - $A.
 
 -spec list_to_map(list()) -> map().
