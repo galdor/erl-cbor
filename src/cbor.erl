@@ -17,11 +17,14 @@
 -export([encode/1, encode_hex/1,
          decode/1, decode/2, decode_hex/1, decode_hex/2]).
 
--export_type([tag/0, tagged_value/0, simple_value/0]).
+-export_type([tag/0, value/0, simple_value/0, type/0]).
 
--type tag() :: non_neg_integer().
+-type tag() :: {tag, non_neg_integer()}.
 
--type tagged_value() :: {tag(), term()}.
+-type type() :: unsigned_integer | neg_integer | byte_string
+              | utf8_string | array | map | simple | float | tag().
+
+-type value() :: {type(), term()}.
 
 -type simple_value() :: {simple_value, 0..255}
                       | false | true | null | undefined.
