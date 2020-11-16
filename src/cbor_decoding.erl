@@ -14,10 +14,10 @@
 
 -module(cbor_decoding).
 
--export([default_options/0, default_tagged_value_interpreters/0,
+-export([default_options/0, default_value_interpreters/0,
          decoder/1, decode/2]).
 
--export_type([decoder/0, options/0, tagged_value_interpreter/0,
+-export_type([decoder/0, options/0, value_interpreter/0,
              decoding_result/1, interpretation_result/1]).
 
 -record(decoder, {options = #{} :: options(),
@@ -25,11 +25,11 @@
 -type decoder() :: #decoder{}.
 
 -type options() :: #{max_depth => non_neg_integer(),
-                     tagged_value_interpreters =>
-                       #{cbor:tag() := tagged_value_interpreter()}}.
+                     value_interpreters => 
+                      #{cbor:type() := value_interpreter()}}.
 
--type tagged_value_interpreter() :: fun((decoder(), cbor:tagged_value()) ->
-                                           interpretation_result(term())).
+-type value_interpreter() :: fun((decoder(), cbor:value()) ->
+                                    interpretation_result(term())).
 
 -type decoding_result(ValueType) :: {ok, ValueType, iodata()} | {error, term()}.
 
@@ -38,22 +38,22 @@
 -spec default_options() -> options().
 default_options() ->
   #{max_depth => 1024,
-    tagged_value_interpreters => default_tagged_value_interpreters()}.
+    value_interpreters => default_value_interpreters()}.
 
--spec default_tagged_value_interpreters() ->
-        #{cbor:tag() := tagged_value_interpreter()}.
-default_tagged_value_interpreters() ->
-  #{0 => fun interpret_utf8_string/2,
-    1 => fun interpret_epoch_based_datetime/2,
-    2 => fun interpret_positive_bignum/2,
-    3 => fun interpret_negative_bignum/2,
-    24 => fun interpret_cbor_value/2,
-    32 => fun interpret_utf8_string/2,
-    33 => fun interpret_base64url_data/2,
-    34 => fun interpret_base64_data/2,
-    35 => fun interpret_utf8_string/2,
-    36 => fun interpret_utf8_string/2,
-    55799 => fun interpret_self_described_cbor_value/2}.
+-spec default_value_interpreters() ->
+        #{cbor:type() := value_interpreter()}.
+      default_value_interpreters() ->
+  #{{tag, 0} => fun interpret_utf8_string/2,
+    {tag, 1} => fun interpret_epoch_based_datetime/2,
+    {tag, 2} => fun interpret_positive_bignum/2,
+    {tag, 3} => fun interpret_negative_bignum/2,
+    {tag, 24} => fun interpret_cbor_value/2,
+    {tag, 32} => fun interpret_utf8_string/2,
+    {tag, 33} => fun interpret_base64url_data/2,
+    {tag, 34} => fun interpret_base64_data/2,
+    {tag, 35} => fun interpret_utf8_string/2,
+    {tag, 36} => fun interpret_utf8_string/2,
+    {tag, 55799} => fun interpret_self_described_cbor_value/2}.
 
 -spec decoder(options()) -> decoder().
 decoder(Opts) ->
@@ -63,36 +63,48 @@ decoder(Opts) ->
 decode(#decoder{depth = Depth, options = #{max_depth := MaxDepth}}, _Data) when
     Depth > MaxDepth ->
   {error, max_depth_reached};
-decode(_Decoder, <<T:8, Data/binary>>) when T =< 16#17 ->
-  {ok, T, Data};
-decode(_Decoder, <<T:8, Data/binary>>) when T >= 16#18, T =< 16#1b ->
-  decode_unsigned_integer(T, Data);
-decode(_Decoder, <<T:8, Data/binary>>) when T >= 16#20, T =< 16#37 ->
-  {ok, -1 - (T - 16#20), Data};
-decode(_Decoder, <<T:8, Data/binary>>) when T >= 16#38, T =< 16#3b ->
-  decode_negative_integer(T, Data);
-decode(_Decoder, <<T:8, Data/binary>>) when T >= 16#40, T =< 16#5b ->
-  decode_byte_string(T, Data);
-decode(_Decoder, <<16#5f:8, Data/binary>>) ->
-  decode_indefinite_length_byte_string(Data);
-decode(_Decoder, <<T:8, Data/binary>>) when T >= 16#60, T =< 16#7b ->
-  decode_utf8_string(T, Data);
-decode(_Decoder, <<16#7f:8, Data/binary>>) ->
-  decode_indefinite_length_utf8_string(Data);
+decode(Decoder, <<T:8, Data/binary>>) when T =< 16#17 ->
+  maybe_interpret_value(Decoder, {unisgned_integer, {ok, T, Data}});
+decode(Decoder, <<T:8, Data/binary>>) when T >= 16#18, T =< 16#1b ->
+  DecodedValue = decode_unsigned_integer(T, Data),
+  maybe_interpret_value(Decoder, {unsigned_integer, DecodedValue});
+decode(Decoder, <<T:8, Data/binary>>) when T >= 16#20, T =< 16#37 ->
+  maybe_interpret_value(Decoder, {neg_integer, {ok, -1 - (T - 16#20), Data}});
+decode(Decoder, <<T:8, Data/binary>>) when T >= 16#38, T =< 16#3b ->
+  DecodedValue = decode_negative_integer(T, Data),
+  maybe_interpret_value(Decoder, {neg_integer, DecodedValue});
+decode(Decoder, <<T:8, Data/binary>>) when T >= 16#40, T =< 16#5b ->
+  DecodedValue = decode_byte_string(T, Data),
+  maybe_interpret_value(Decoder, {byte_string, DecodedValue});
+decode(Decoder, <<16#5f:8, Data/binary>>) ->
+  DecodeValue = decode_indefinite_length_byte_string(Data),
+  maybe_interpret_value(Decoder, {byte_string, DecodeValue});
+decode(Decoder, <<T:8, Data/binary>>) when T >= 16#60, T =< 16#7b ->
+  DecodedValue = decode_utf8_string(T, Data),
+  maybe_interpret_value(Decoder, {utf8_string, DecodedValue});
+decode(Decoder, <<16#7f:8, Data/binary>>) ->
+  DecodedValue = decode_indefinite_length_utf8_string(Data),
+  maybe_interpret_value(Decoder, {utf8_string, DecodedValue});
 decode(Decoder, <<T:8, Data/binary>>) when T >= 16#80, T =< 16#9b ->
-  decode_array(Decoder, T, Data);
+  DecodedValue = decode_array(Decoder, T, Data),
+  maybe_interpret_value(Decoder, {array, DecodedValue});
 decode(Decoder, <<16#9f:8, Data/binary>>) ->
-  decode_indefinite_length_array(Decoder, Data);
+  DecodedValue = decode_indefinite_length_array(Decoder, Data),
+  maybe_interpret_value(Decoder, {array, DecodedValue});
 decode(Decoder, <<T:8, Data/binary>>) when T >= 16#a0, T =< 16#bb ->
-  decode_map(Decoder, T, Data);
+  DecodedValue = decode_map(Decoder, T, Data),
+  maybe_interpret_value(Decoder, {map, DecodedValue});
 decode(Decoder, <<16#bf:8, Data/binary>>) ->
-  decode_indefinite_length_map(Decoder, Data);
+  DecodedValue = decode_indefinite_length_map(Decoder, Data),
+  maybe_interpret_value(Decoder, {map, DecodedValue});
 decode(Decoder, <<T:8, Data/binary>>) when T >= 16#c0, T =< 16#db ->
   decode_tagged_value(Decoder, T, Data);
-decode(_Decoder, <<T:8, Data/binary>>) when T >= 16#e0, T =< 16#f8 ->
-  decode_simple_value(T, Data);
-decode(_Decoder, <<T, Data/binary>>) when T >= 16#f9, T =< 16#fb ->
-  decode_float(T, Data);
+decode(Decoder, <<T:8, Data/binary>>) when T >= 16#e0, T =< 16#f8 ->
+  DecodedValue = decode_simple_value(T, Data),
+  maybe_interpret_value(Decoder, {simple, DecodedValue});
+decode(Decoder, <<T, Data/binary>>) when T >= 16#f9, T =< 16#fb ->
+  DecodedValue = decode_float(T, Data),
+  maybe_interpret_value(Decoder, {float, DecodedValue});
 decode(_Decoder, <<T:8, _Data/binary>>) ->
   {error, {invalid_type_tag, T}};
 decode(_Decoder, <<>>) ->
@@ -277,7 +289,7 @@ decode_tagged_data(Decoder = #decoder{depth = Depth}, Tag, Data) ->
   Decoder2 = Decoder#decoder{depth = Depth+1},
   case decode(Decoder2, Data) of
     {ok, Value, Rest} ->
-      case interpret_tagged_value(Decoder2, {Tag, Value}) of
+      case interpret_value(Decoder2, {Tag, Value}) of
         {ok, Value2} ->
           {ok, Value2, Rest};
         {error, Reason} ->
@@ -287,9 +299,21 @@ decode_tagged_data(Decoder = #decoder{depth = Depth}, Tag, Data) ->
       {error, Reason}
   end.
 
--spec interpret_tagged_value(decoder(), cbor:tagged_value()) ->
+-spec maybe_interpret_value(decoder(), {cbor:types(), decoding_result(term())})
+  -> decoding_result(term()).
+maybe_interpret_value(_Decoder, {_Type, {error, _Value} = Tag}) ->
+  Tag;
+maybe_interpret_value(Decoder, {Type, {ok, Value, Rest}}) ->
+  case interpret_value(Decoder, {Type, Value}) of
+    {ok, {Type, Value}} ->
+      {ok, Value, Rest};
+    {ok, Interpreted} ->
+      {ok, Interpreted, Rest}
+  end.
+
+-spec interpret_value(decoder(), cbor:tagged_value()) ->
         interpretation_result(term()).
-interpret_tagged_value(Decoder = #decoder{options = #{tagged_value_interpreters := Interpreters}},
+interpret_value(Decoder = #decoder{options = #{value_interpreters := Interpreters}},
                        TaggedValue = {Tag, _Value}) ->
   case maps:find(Tag, Interpreters) of
     {ok, Interpreter} ->
@@ -297,7 +321,7 @@ interpret_tagged_value(Decoder = #decoder{options = #{tagged_value_interpreters 
     error ->
       {ok, TaggedValue}
   end;
-interpret_tagged_value(_Decoder, TaggedValue) ->
+interpret_value(_Decoder, TaggedValue) ->
   {ok, TaggedValue}.
 
 -spec interpret_utf8_string(decoder(), cbor:tagged_value()) ->
