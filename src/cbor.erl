@@ -19,7 +19,7 @@
 
 -export_type([tag/0, value/0, simple_value/0, type/0]).
 
--type tag() :: {tag, non_neg_integer()}.
+-type tag() :: non_neg_integer().
 
 -type type() :: unsigned_integer | neg_integer | byte_string
               | utf8_string | array | map | simple | float | tag().
