@@ -64,7 +64,7 @@ decode(#decoder{depth = Depth, options = #{max_depth := MaxDepth}}, _Data) when
     Depth > MaxDepth ->
   {error, max_depth_reached};
 decode(Decoder, <<T:8, Data/binary>>) when T =< 16#17 ->
-  maybe_interpret_value(Decoder, {unisgned_integer, {ok, T, Data}});
+  maybe_interpret_value(Decoder, {unsigned_integer, {ok, T, Data}});
 decode(Decoder, <<T:8, Data/binary>>) when T >= 16#18, T =< 16#1b ->
   DecodedValue = decode_unsigned_integer(T, Data),
   maybe_interpret_value(Decoder, {unsigned_integer, DecodedValue});
