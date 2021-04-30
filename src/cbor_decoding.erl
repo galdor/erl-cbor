@@ -18,7 +18,9 @@
          decoder/1, decode/2]).
 
 -export_type([decoder/0, options/0, value_interpreter/0,
-             decoding_result/1, interpretation_result/1]).
+             decoding_result/1, decoding_error/0,
+             invalid_input_error/0, truncated_input_error/0,
+             interpretation_result/1, interpretation_error/0]).
 
 -record(decoder, {options = #{} :: options(),
                   depth = 0 :: non_neg_integer()}).
@@ -31,9 +33,41 @@
 -type value_interpreter() :: fun((decoder(), cbor:value()) ->
                                     interpretation_result(term())).
 
--type decoding_result(ValueType) :: {ok, ValueType, iodata()} | {error, term()}.
+-type decoding_result(ValueType) :: {ok, ValueType, iodata()} | {error, decoding_error()}.
 
--type interpretation_result(ValueType) :: {ok, ValueType} | {error, term()}.
+-type decoding_error() :: invalid_input_error() |
+                          truncated_input_error() |
+                          interpretation_error().
+
+-type invalid_input_error() :: invalid_sequence_header |
+                               no_input |
+                               odd_number_of_map_values |
+                               {invalid_base64_data, term()} |
+                               {invalid_base64_data, term()} |
+                               {invalid_base64url_data, term()} |
+                               {invalid_base64url_data, term()} |
+                               {invalid_cbor_data, term()} |
+                               {invalid_cbor_data, term()} |
+                               {invalid_tagged_value, tuple()} |
+                               {invalid_tagged_value, tuple()} |
+                               {invalid_trailing_data, binary()} |
+                               {invalid_trailing_data, binary()} |
+                               {invalid_type_tag, byte()}.
+
+-type truncated_input_error() :: truncated_array |
+                                 truncated_byte_string |
+                                 truncated_float |
+                                 truncated_map |
+                                 truncated_negative_integer |
+                                 truncated_sequence_header |
+                                 truncated_simple_value |
+                                 truncated_tagged_value |
+                                 truncated_unsigned_integer |
+                                 truncated_utf8_string.
+
+-type interpretation_result(ValueType) :: {ok, ValueType} | {error, interpretation_error()}.
+
+-type interpretation_error() :: term().
 
 -spec default_options() -> options().
 default_options() ->
