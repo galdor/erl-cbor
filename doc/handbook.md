@@ -32,8 +32,8 @@ Erlang data are encoded using the following type mapping:
 - Atoms are used for specific CBOR values:
   - `positive_infinity`: the IEEE.754 +Inf floating point value.
   - `negative_infinity`: the IEEE.754 -Inf floating point value.
-  - `positive_zero`: the IEEE.754 -0.0 floating point value.
-  - `negative_zero`: the IEEE.754 +0.0 floating point value.
+  - `positive_zero`: the IEEE.754 +0.0 floating point value.
+  - `negative_zero`: the IEEE.754 -0.0 floating point value.
   - `nan`: the IEEE.754 NaN floating point value.
   - `null`: the `null` CBOR simple value.
   - `undefined`: the `undefined` CBOR simple value.
